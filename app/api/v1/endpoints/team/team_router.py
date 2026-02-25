@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import inspect, text
 from typing import List
 
 from app.db.database import get_db
@@ -16,6 +17,15 @@ router = APIRouter(
 )
 
 
+def _ensure_teams_owner_id_column(db: Session) -> None:
+    inspector = inspect(db.bind)
+    team_columns = {column["name"] for column in inspector.get_columns("teams")}
+
+    if "owner_id" not in team_columns:
+        db.execute(text("ALTER TABLE teams ADD COLUMN owner_id INTEGER"))
+        db.commit()
+
+
 # ✅ CREATE TEAM
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
 def create_team(
@@ -23,6 +33,12 @@ def create_team(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    try:
+        _ensure_teams_owner_id_column(db)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database schema issue: {str(e)}")
+
     owner = db.query(User).filter(User.email == current_user_email).first()
     if not owner:
         raise HTTPException(status_code=404, detail="Owner not found")
@@ -63,9 +79,9 @@ def create_team(
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid team data or duplicate member assignment")
-    except Exception:
+    except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail="Failed to create team")
+        raise HTTPException(status_code=500, detail=f"Failed to create team: {str(e)}")
 
     return new_team
 
