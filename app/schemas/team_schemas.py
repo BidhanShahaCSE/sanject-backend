@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from datetime import datetime
 from typing import Optional, List
 
 
@@ -22,6 +23,8 @@ class TeamUpdate(BaseModel):
 # 🔹 Response
 class TeamResponse(TeamBase):
     id: int
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True  # Pydantic v2 (orm_mode এর বদলে)

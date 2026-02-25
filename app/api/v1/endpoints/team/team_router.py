@@ -25,6 +25,16 @@ def _ensure_teams_owner_id_column(db: Session) -> None:
         db.execute(text("ALTER TABLE teams ADD COLUMN owner_id INTEGER"))
         db.commit()
 
+    if "created_at" not in team_columns:
+        db.execute(text("ALTER TABLE teams ADD COLUMN created_at TIMESTAMP"))
+        db.execute(text("UPDATE teams SET created_at = NOW() WHERE created_at IS NULL"))
+        db.commit()
+
+    if "updated_at" not in team_columns:
+        db.execute(text("ALTER TABLE teams ADD COLUMN updated_at TIMESTAMP"))
+        db.execute(text("UPDATE teams SET updated_at = NOW() WHERE updated_at IS NULL"))
+        db.commit()
+
 
 # ✅ CREATE TEAM
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
@@ -67,6 +77,14 @@ def create_team(
         db.commit()
         db.refresh(new_team)
 
+        db.execute(
+            text(
+                "UPDATE teams SET created_at = COALESCE(created_at, NOW()), updated_at = COALESCE(updated_at, NOW()) WHERE id = :team_id"
+            ),
+            {"team_id": new_team.id},
+        )
+        db.commit()
+
         # 🔹 Add Owner to TeamMembers
         db.add(TeamMember(team_id=new_team.id, user_id=owner.id))
 
@@ -92,7 +110,13 @@ def get_teams(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
-    return db.query(Team).all()
+    _ensure_teams_owner_id_column(db)
+    result = db.execute(
+        text(
+            "SELECT id, team_name, description, created_at, updated_at FROM teams ORDER BY id DESC"
+        )
+    )
+    return [dict(row) for row in result.mappings().all()]
 
 
 # ✅ UPDATE TEAM
@@ -103,6 +127,7 @@ def update_team(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    _ensure_teams_owner_id_column(db)
     team = db.query(Team).filter(Team.id == team_id).first()
 
     if not team:
@@ -113,6 +138,11 @@ def update_team(
     for key, value in update_data.items():
         setattr(team, key, value)
 
+    db.commit()
+    db.execute(
+        text("UPDATE teams SET updated_at = NOW() WHERE id = :team_id"),
+        {"team_id": team.id},
+    )
     db.commit()
     db.refresh(team)
 
@@ -126,6 +156,7 @@ def delete_team(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    _ensure_teams_owner_id_column(db)
     team = db.query(Team).filter(Team.id == team_id).first()
 
     if not team:
