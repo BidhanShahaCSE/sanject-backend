@@ -10,8 +10,14 @@ from app.model.user_model import User
 from app.model.project_model import Project 
 from app.model.project_member_model import ProjectMember 
 from app.model.notification_model import Notification
+
+# Schemas
 from app.schemas.assignment_schemas import AssignmentCreate, AssignmentOut, AssignmentUpdate
-from app.schemas.assignment_subtask_schemas import AssignmentSubTaskCreate, AssignmentSubTaskOut, AssignmentSubTaskUpdate
+from app.schemas.assignment_subtask_schemas import (
+    AssignmentSubTaskCreate, 
+    AssignmentSubTaskOut, 
+    AssignmentSubTaskUpdate
+)
 
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
@@ -23,9 +29,10 @@ router = APIRouter(
 ALLOWED_TASK_TYPES = ["Assignment", "Lab Report", "Exam", "Home Work"]
 
 # ----------------------------------------------------------------
-# 🚀 ১. মেইন অ্যাসাইনমেন্ট সেকশন
+# 🚀 ১. মেইন অ্যাসাইনমেন্ট সেকশন (Main Assignment Section)
 # ----------------------------------------------------------------
 
+# অ্যাসাইনমেন্ট তৈরি করা
 @router.post("/", response_model=AssignmentOut, status_code=status.HTTP_201_CREATED)
 def create_assignment(
     data: AssignmentCreate, 
@@ -54,6 +61,7 @@ def create_assignment(
         db.commit()
         db.refresh(new_assignment)
 
+        # মালিকের জন্য নোটিফিকেশন
         owner_notification = Notification(
             user_id=owner.id,
             title="Assignment Created",
@@ -64,6 +72,7 @@ def create_assignment(
         )
         db.add(owner_notification)
 
+        # মেম্বারদের জন্য নোটিফিকেশন
         if new_assignment.org_id:
             org_members = db.query(ProjectMember).filter(ProjectMember.project_id == new_assignment.org_id).all()
             for member_entry in org_members:
@@ -85,12 +94,12 @@ def create_assignment(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# সব অ্যাসাইনমেন্টের লিস্ট দেখার রাউটার
+# সব অ্যাসাইনমেন্টের লিস্ট দেখা
 @router.get("/", response_model=List[AssignmentOut])
 def get_all_assignments(db: Session = Depends(get_db)):
     return db.query(Assignment).all()
 
-# নির্দিষ্ট একটি অ্যাসাইনমেন্ট আইডি দিয়ে দেখার রাউটার
+# নির্দিষ্ট আইডি দিয়ে অ্যাসাইনমেন্ট দেখা
 @router.get("/{assignment_id}", response_model=AssignmentOut)
 def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
     assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
@@ -98,7 +107,7 @@ def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Assignment not found")
     return assignment
 
-# মেইন অ্যাসাইনমেন্ট ডিলিট করার রাউটার
+# অ্যাসাইনমেন্ট ডিলিট করা
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_assignment(
     assignment_id: int, 
@@ -118,7 +127,7 @@ def delete_assignment(
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 # ----------------------------------------------------------------
-# 🚀 ২. সাব-টাস্ক সেকশন (Upload, Update, Delete & Notifications)
+# 🚀 ২. সাব-টাস্ক সেকশন (Sub-Task Section)
 # ----------------------------------------------------------------
 
 @router.post("/subtasks/upload-file", response_model=AssignmentSubTaskOut)
@@ -209,7 +218,7 @@ def delete_subtask(
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 # ----------------------------------------------------------------
-# 🚀 ৩. সাবমিশন এবং ইস্যু রিপোর্টিং
+# 🚀 ৩. সাবমিশন এবং ইস্যু রিপোর্টিং (Submission & Reporting)
 # ----------------------------------------------------------------
 
 @router.post("/subtasks/{subtask_id}/complete-submission")
@@ -219,6 +228,9 @@ def full_submission_notification(
     current_user_email: str = Depends(get_current_user_email)
 ):
     subtask = db.query(AssignmentSubTask).filter(AssignmentSubTask.id == subtask_id).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+
     main_assignment = db.query(Assignment).filter(Assignment.id == subtask.assignment_id).first()
     project = db.query(Project).filter(Project.id == main_assignment.org_id).first()
     
@@ -242,6 +254,9 @@ def report_subtask_issue(
     current_user_email: str = Depends(get_current_user_email)
 ):
     subtask = db.query(AssignmentSubTask).filter(AssignmentSubTask.id == subtask_id).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+
     main_assignment = db.query(Assignment).filter(Assignment.id == subtask.assignment_id).first()
     project = db.query(Project).filter(Project.id == main_assignment.org_id).first()
     owner = db.query(User).filter(User.id == project.owner_id).first()
