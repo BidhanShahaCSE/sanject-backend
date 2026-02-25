@@ -6,6 +6,8 @@ from app.db.database import get_db
 from app.model.team_model import Team
 from app.model.user_model import User
 from app.model.notification_model import Notification
+from app.model.team_member_model import TeamMember   # ✅ ADD THIS
+
 from app.schemas.team_schemas import TeamCreate, TeamResponse, TeamUpdate
 
 # 🛡️ টোকেন থেকে ইউজার ভেরিফিকেশন করার ডিপেন্ডেন্সি
@@ -16,7 +18,7 @@ router = APIRouter(
     tags=["Teams"]
 )
 
-# 🚀 ১. নতুন টিম তৈরি করা (মেম্বার ভ্যালিডেশন এবং ওনার ও মেম্বারদের নোটিফিকেশন সহ)
+# 🚀 ১. নতুন টিম তৈরি করা
 @router.post("/", response_model=TeamResponse, status_code=status.HTTP_201_CREATED)
 def create_team(
     team_data: TeamCreate, 
@@ -28,9 +30,8 @@ def create_team(
     if not owner:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 🛡️ মেম্বার ভ্যালিডেশন: প্রতিটি ইমেইল সিস্টেমে আছে কি না চেক করা
+    # 🛡️ মেম্বার ভ্যালিডেশন
     member_users = []
-    # যদি আপনার Schema-তে members_email লিস্ট থাকে
     if hasattr(team_data, 'members_email') and team_data.members_email:
         for email in team_data.members_email:
             reg_user = db.query(User).filter(User.email == email).first()
@@ -41,7 +42,7 @@ def create_team(
                 )
             member_users.append(reg_user)
 
-    # নতুন টিম অবজেক্ট তৈরি
+    # ✅ নতুন টিম তৈরি
     new_team = Team(
         team_name=team_data.team_name,
         description=team_data.description
@@ -52,7 +53,22 @@ def create_team(
         db.commit()
         db.refresh(new_team)
 
-        # 🔔 ১. ওনারের জন্য সাকসেস নোটিফিকেশন পাঠানো
+        # ✅ OWNER কে team_members table এ add করা
+        owner_member = TeamMember(
+            team_id=new_team.id,
+            user_id=owner.id
+        )
+        db.add(owner_member)
+
+        # ✅ MEMBERS কে team_members table এ add করা
+        for member in member_users:
+            team_member = TeamMember(
+                team_id=new_team.id,
+                user_id=member.id
+            )
+            db.add(team_member)
+
+        # 🔔 OWNER notification
         owner_notification = Notification(
             user_id=owner.id,
             title="Team Created",
@@ -63,7 +79,7 @@ def create_team(
         )
         db.add(owner_notification)
 
-        # 🔔 ২. প্রতিটি মেম্বারের জন্য নোটিফিকেশন পাঠানো
+        # 🔔 MEMBER notifications
         for member in member_users:
             member_notification = Notification(
                 user_id=member.id,
@@ -75,7 +91,7 @@ def create_team(
             )
             db.add(member_notification)
 
-        db.commit() 
+        db.commit()
         return new_team
 
     except Exception as e:
