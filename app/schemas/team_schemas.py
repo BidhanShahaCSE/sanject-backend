@@ -2,28 +2,26 @@ from pydantic import BaseModel
 from typing import Optional, List
 
 
-# Shared fields
+# 🔹 Shared
 class TeamBase(BaseModel):
     team_name: str
     description: Optional[str] = None
-    member_emails: Optional[List[str]] = []   # ✅ add this
 
 
-# Used when creating a team (POST)
+# 🔹 Create Team (POST)
 class TeamCreate(TeamBase):
-    pass
+    members_email: Optional[List[str]] = []   # ✅ ADD THIS
 
 
-# Used when updating a team (PUT / PATCH)
+# 🔹 Update Team
 class TeamUpdate(BaseModel):
     team_name: Optional[str] = None
     description: Optional[str] = None
-    member_emails: Optional[List[str]] = None   # ✅ add this
 
 
-# Used when returning response (GET)
+# 🔹 Response
 class TeamResponse(TeamBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True  # Pydantic v2 (orm_mode এর বদলে)
