@@ -77,7 +77,22 @@ def write_note_content(
     db.refresh(db_note)
     return db_note
 
-
+# এটি তোর fastapi router ফাইলে যোগ কর
+@router.patch("/{note_id}/write", response_model=NoteResponse)
+def update_note_content(
+    note_id: int, 
+    content_data: NoteUpdate, 
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email)
+):
+    db_note = db.query(Note).filter(Note.id == note_id, Note.owner_email == current_user_email).first()
+    if not db_note:
+        raise HTTPException(status_code=404, detail="Note not found")
+    
+    db_note.content = content_data.content 
+    db.commit()
+    db.refresh(db_note)
+    return db_note
 # 🚀 ৩. ইউজারের সব নোটের লিস্ট দেখা
 @router.get("/", response_model=List[NoteResponse])
 def get_user_notes(
