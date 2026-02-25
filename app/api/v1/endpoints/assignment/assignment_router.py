@@ -85,6 +85,38 @@ def create_assignment(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
+# সব অ্যাসাইনমেন্টের লিস্ট দেখার রাউটার
+@router.get("/", response_model=List[AssignmentOut])
+def get_all_assignments(db: Session = Depends(get_db)):
+    return db.query(Assignment).all()
+
+# নির্দিষ্ট একটি অ্যাসাইনমেন্ট আইডি দিয়ে দেখার রাউটার
+@router.get("/{assignment_id}", response_model=AssignmentOut)
+def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
+    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    return assignment
+
+# মেইন অ্যাসাইনমেন্ট ডিলিট করার রাউটার
+@router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_assignment(
+    assignment_id: int, 
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email)
+):
+    db_assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    if not db_assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    try:
+        db.delete(db_assignment)
+        db.commit()
+        return None
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+
 # ----------------------------------------------------------------
 # 🚀 ২. সাব-টাস্ক সেকশন (Upload, Update, Delete & Notifications)
 # ----------------------------------------------------------------
@@ -127,7 +159,6 @@ def upload_subtask_file(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 সাব-টাস্ক আপডেট করা
 @router.patch("/subtasks/{subtask_id}", response_model=AssignmentSubTaskOut)
 def update_subtask(
     subtask_id: int,
@@ -137,7 +168,7 @@ def update_subtask(
 ):
     subtask_query = db.query(AssignmentSubTask).filter(
         AssignmentSubTask.id == subtask_id, 
-        AssignmentSubTask.owner_email == current_user_email # 🛡️ মালিকানা যাচাই
+        AssignmentSubTask.owner_email == current_user_email 
     )
     db_subtask = subtask_query.first()
 
@@ -155,7 +186,6 @@ def update_subtask(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
-# 🚀 সাব-টাস্ক ডিলিট করা
 @router.delete("/subtasks/{subtask_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_subtask(
     subtask_id: int,
@@ -164,7 +194,7 @@ def delete_subtask(
 ):
     db_subtask = db.query(AssignmentSubTask).filter(
         AssignmentSubTask.id == subtask_id, 
-        AssignmentSubTask.owner_email == current_user_email # 🛡️ মালিকানা যাচাই
+        AssignmentSubTask.owner_email == current_user_email 
     ).first()
 
     if not db_subtask:
@@ -231,44 +261,3 @@ def report_subtask_issue(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-
-
-        # 🚀 ৪. অ্যাসাইনমেন্ট দেখার রাউটার (উদাহরণ)
-
-# সব অ্যাসাইনমেন্টের লিস্ট পাওয়ার জন্য
-@router.get("/", response_model=List[AssignmentOut])
-def get_all_assignments(db: Session = Depends(get_db)):
-    return db.query(Assignment).all()
-
-# নির্দিষ্ট একটি অ্যাসাইনমেন্ট আইডি দিয়ে দেখার জন্য
-@router.get("/{assignment_id}", response_model=AssignmentOut)
-def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
-    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
-    if not assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    return assignment
-
-
-
-# 🚀 মেইন অ্যাসাইনমেন্ট ডিলিট করার রাউটার
-@router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_assignment(
-    assignment_id: int, 
-    db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user_email)
-):
-    # ডাটাবেস থেকে অ্যাসাইনমেন্টটি খুঁজে বের করা
-    db_assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
-
-    if not db_assignment:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-
-    # এখানে আপনি চাইলে চেক করতে পারেন যে ইউজারটি ওই অ্যাসাইনমেন্টের মালিক কি না (Authorization)
-
-    try:
-        db.delete(db_assignment)
-        db.commit()
-        return None
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
