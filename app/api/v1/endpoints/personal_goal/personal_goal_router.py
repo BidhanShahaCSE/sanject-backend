@@ -91,3 +91,26 @@ def update_personal_goal(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/{goal_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_personal_goal(
+    goal_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email)
+):
+    db_goal = db.query(PersonalGoal).filter(
+        PersonalGoal.id == goal_id,
+        PersonalGoal.owner_email == current_user_email
+    ).first()
+
+    if not db_goal:
+        raise HTTPException(status_code=404, detail="Goal not found or unauthorized")
+
+    try:
+        db.delete(db_goal)
+        db.commit()
+        return None
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Delete failed: {str(e)}")
