@@ -20,6 +20,10 @@ class NotificationUpdate(BaseModel):
     is_read: Optional[bool] = None
 
 
+class DeviceTokenUpdate(BaseModel):
+    fcm_token: str
+
+
 class NotificationOut(NotificationBase):
     id: int
     created_at: datetime

@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.database import get_db
 from app.model.notification_model import Notification
+from app.model.device_token_model import DeviceToken
 from app.model.user_model import User
-from app.schemas.notification_schemas import NotificationCreate, NotificationOut, NotificationUpdate
+from app.schemas.notification_schemas import DeviceTokenUpdate, NotificationCreate, NotificationOut, NotificationUpdate
+from sqlalchemy.exc import SQLAlchemyError
 
 # 🛡️ টোকেন থেকে ইউজার ইমেইল পাওয়ার ডিপেন্ডেন্সি
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
@@ -13,6 +15,30 @@ router = APIRouter(
     prefix="/notifications",
     tags=["Notifications"]
 )
+
+
+@router.post("/device-token")
+def save_device_token(
+    payload: DeviceTokenUpdate,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email)
+):
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    try:
+        existing = db.query(DeviceToken).filter(DeviceToken.user_id == user.id).first()
+        if existing:
+            existing.fcm_token = payload.fcm_token
+        else:
+            db.add(DeviceToken(user_id=user.id, fcm_token=payload.fcm_token))
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        return {"message": "Device token skipped. Table not ready."}
+
+    return {"message": "Device token saved successfully."}
 
 # 🚀 ১. শুধুমাত্র নিজের নোটিফিকেশনগুলো দেখা (UI ডিজাইন অনুযায়ী)
 @router.get("/", response_model=List[NotificationOut])

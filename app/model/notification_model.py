@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, event
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 from app.db.database import Base
@@ -20,3 +20,15 @@ class Notification(Base):
     is_read = Column(Boolean, default=False)
 
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+@event.listens_for(Notification, "after_insert")
+def notification_after_insert(mapper, connection, target):
+    from app.services.push_notification_service import send_push_for_notification
+
+    send_push_for_notification(
+        connection=connection,
+        user_id=target.user_id,
+        title=target.title,
+        message=target.message,
+    )

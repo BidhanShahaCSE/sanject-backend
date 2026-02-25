@@ -2,6 +2,7 @@ from app.db.database import Base, engine
 from app.model.assignment_model import Assignment
 from app.model.assignment_subtask_model import AssignmentSubTask
 from app.model.daily_task_model import DailyTask
+from app.model.device_token_model import DeviceToken
 from app.model.employee_model import Employee
 from app.model.manager_model import Manager
 from app.model.note_model import Note
