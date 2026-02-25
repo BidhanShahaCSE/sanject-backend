@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List
 
 from app.db.database import get_db
 from app.model.team_model import Team
 from app.model.user_model import User
 from app.model.team_member_model import TeamMember
-from app.model.notification_model import Notification
 from app.schemas.team_schemas import TeamCreate, TeamResponse, TeamUpdate
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email
 
@@ -42,21 +42,30 @@ def create_team(
     # 🔹 Create Team
     new_team = Team(
         team_name=team_data.team_name,
-        description=team_data.description
+        description=team_data.description,
+        owner_id=owner.id
     )
 
-    db.add(new_team)
-    db.commit()
-    db.refresh(new_team)
+    try:
+        db.add(new_team)
+        db.commit()
+        db.refresh(new_team)
 
-    # 🔹 Add Owner to TeamMembers
-    db.add(TeamMember(team_id=new_team.id, user_id=owner.id))
+        # 🔹 Add Owner to TeamMembers
+        db.add(TeamMember(team_id=new_team.id, user_id=owner.id))
 
-    # 🔹 Add Members
-    for member in member_users:
-        db.add(TeamMember(team_id=new_team.id, user_id=member.id))
+        # 🔹 Add Members
+        for member in member_users:
+            if member.id != owner.id:
+                db.add(TeamMember(team_id=new_team.id, user_id=member.id))
 
-    db.commit()
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Invalid team data or duplicate member assignment")
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Failed to create team")
 
     return new_team
 
