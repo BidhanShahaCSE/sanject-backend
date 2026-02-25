@@ -17,6 +17,7 @@ from app.model.subtask_model import SubTask
 from app.model.task_model import Task
 from app.model.teacher_models import Teacher
 from app.model.team_model import Team
+from app.model.team_member_model import TeamMember
 from app.model.user_model import User
 
 Base.metadata.create_all(bind=engine)
