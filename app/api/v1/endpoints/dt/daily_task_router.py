@@ -12,13 +12,11 @@ from app.schemas.daily_task_schemas import DailyTaskCreate, DailyTaskOut, DailyT
 # 🛡️ টোকেন থেকে ইউজার ভেরিফিকেশন করার ডিপেন্ডেন্সি
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
-router = APIRouter(
-    prefix="/daily-tasks",
-    tags=["Daily Tasks"]
-)
+router = APIRouter(tags=["Daily Tasks"])
 
 # 🚀 ১. নতুন ডেইলি টাস্ক তৈরি করা এবং নোটিফিকেশন পাঠানো
-@router.post("/", response_model=DailyTaskOut, status_code=status.HTTP_201_CREATED)
+@router.post("/daily-tasks/", response_model=DailyTaskOut, status_code=status.HTTP_201_CREATED)
+@router.post("/dt/", response_model=DailyTaskOut, status_code=status.HTTP_201_CREATED)
 def create_daily_task(
     task_data: DailyTaskCreate, 
     db: Session = Depends(get_db),
@@ -63,7 +61,8 @@ def create_daily_task(
 
 
 # 🚀 ২. ইউজারের সব ডেইলি টাস্কের লিস্ট দেখা
-@router.get("/", response_model=List[DailyTaskOut])
+@router.get("/daily-tasks/", response_model=List[DailyTaskOut])
+@router.get("/dt/", response_model=List[DailyTaskOut])
 def get_my_daily_tasks(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
@@ -74,7 +73,8 @@ def get_my_daily_tasks(
 
 
 # 🚀 ৩. নির্দিষ্ট টাস্ক আপডেট করা
-@router.patch("/{task_id}", response_model=DailyTaskOut)
+@router.patch("/daily-tasks/{task_id}", response_model=DailyTaskOut)
+@router.patch("/dt/{task_id}", response_model=DailyTaskOut)
 def update_daily_task(
     task_id: int, 
     task_data: DailyTaskUpdate, 
@@ -100,7 +100,8 @@ def update_daily_task(
 
 
 # 🚀 ৪. ডেইলি টাস্ক ডিলিট করা
-@router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/daily-tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/dt/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_daily_task(
     task_id: int, 
     db: Session = Depends(get_db),
