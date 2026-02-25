@@ -71,7 +71,29 @@ def get_my_daily_tasks(
         DailyTask.owner_email == current_user_email
     ).order_by(DailyTask.task_date.desc()).all()
 
-
+# 🚀 Daily Task আপডেট করার এপিআই
+@router.patch("/{task_id}", response_model=DailyTaskResponse)
+def update_daily_task(
+    task_id: int, 
+    task_data: DailyTaskCreate, # তোর আগের স্কিমা অনুযায়ী
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email)
+):
+    # ডাটাবেসে ওই আইডি এবং ইউজারের টাস্কটা খুঁজো
+    db_task = db.query(DailyTask).filter(
+        DailyTask.id == task_id, 
+        DailyTask.owner_email == current_user_email
+    ).first()
+    
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found or unauthorized")
+    
+    # নাম আপডেট করো
+    db_task.name = task_data.name
+    
+    db.commit()
+    db.refresh(db_task)
+    return db_task
 # 🚀 ৩. নির্দিষ্ট টাস্ক আপডেট করা
 @router.patch("/daily-tasks/{task_id}", response_model=DailyTaskOut)
 @router.patch("/dt/{task_id}", response_model=DailyTaskOut)
