@@ -66,7 +66,7 @@ def get_my_daily_tasks(
 ):
     return db.query(DailyTask).filter(
         DailyTask.owner_email == current_user_email
-    ).order_of(DailyTask.task_date.desc()).all()
+    ).order_by(DailyTask.task_date.desc()).all()
 
 
 # 🚀 ৩. নির্দিষ্ট টাস্ক আপডেট করা (সব ফিল্ড সহ)
