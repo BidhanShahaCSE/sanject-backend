@@ -1,10 +1,11 @@
 import json
 import os
+from datetime import timedelta
 
 import firebase_admin
 from firebase_admin import credentials, messaging
 from firebase_admin.exceptions import FirebaseError
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.model.device_token_model import DeviceToken
@@ -39,14 +40,15 @@ def send_push_for_notification(connection, user_id: int, title: str, message: st
         return
 
     try:
-        token_row = connection.execute(
-            select(DeviceToken.fcm_token).where(DeviceToken.user_id == user_id)
-        ).first()
+        token_rows = connection.execute(
+            select(DeviceToken.id, DeviceToken.fcm_token)
+            .where(DeviceToken.user_id == user_id)
+            .order_by(DeviceToken.created_at.desc())
+        ).all()
     except SQLAlchemyError:
         return
 
-    token = token_row[0] if token_row else None
-    if not token:
+    if not token_rows:
         return
 
     notification = messaging.Notification(
@@ -54,25 +56,44 @@ def send_push_for_notification(connection, user_id: int, title: str, message: st
         body=message,
     )
 
-    firebase_message = messaging.Message(
-        token=token,
-        notification=notification,
-        android=messaging.AndroidConfig(
-            priority="high",
-            notification=messaging.AndroidNotification(
-                channel_id="in_app_popup_channel_v2",
-                sound="default",
-            ),
-        ),
-        data={
-            "type": "app_notification",
-            "user_id": str(user_id),
-            "title": title,
-            "body": message,
-        },
-    )
+    invalid_token_ids = []
 
-    try:
-        messaging.send(firebase_message)
-    except FirebaseError:
-        pass
+    for token_id, token in token_rows:
+        firebase_message = messaging.Message(
+            token=token,
+            notification=notification,
+            android=messaging.AndroidConfig(
+                priority="high",
+                ttl=timedelta(hours=24),
+                direct_boot_ok=True,
+                notification=messaging.AndroidNotification(
+                    channel_id="in_app_popup_channel_v2",
+                    sound="default",
+                    priority="max",
+                    default_sound=True,
+                    default_vibrate_timings=True,
+                    visibility="public",
+                ),
+            ),
+            data={
+                "type": "app_notification",
+                "user_id": str(user_id),
+                "title": title,
+                "body": message,
+            },
+        )
+
+        try:
+            messaging.send(firebase_message)
+        except FirebaseError as exc:
+            code = getattr(exc, "code", "") or ""
+            if code in {"registration-token-not-registered", "invalid-argument"}:
+                invalid_token_ids.append(token_id)
+
+    if invalid_token_ids:
+        try:
+            connection.execute(
+                delete(DeviceToken).where(DeviceToken.id.in_(invalid_token_ids))
+            )
+        except SQLAlchemyError:
+            pass

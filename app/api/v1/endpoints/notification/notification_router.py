@@ -7,6 +7,7 @@ from app.model.device_token_model import DeviceToken
 from app.model.user_model import User
 from app.schemas.notification_schemas import DeviceTokenUpdate, NotificationCreate, NotificationOut, NotificationUpdate
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import delete
 
 # 🛡️ Token to user email power dependency
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
@@ -39,6 +40,13 @@ def save_device_token(
             existing_for_user.fcm_token = payload.fcm_token
         else:
             db.add(DeviceToken(user_id=user.id, fcm_token=payload.fcm_token))
+
+        db.execute(
+            delete(DeviceToken).where(
+                DeviceToken.user_id == user.id,
+                DeviceToken.fcm_token != payload.fcm_token,
+            )
+        )
         db.commit()
     except SQLAlchemyError:
         db.rollback()
