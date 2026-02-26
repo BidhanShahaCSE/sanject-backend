@@ -9,6 +9,7 @@ from app.model.sms_message_model import SmsMessage
 from app.model.team_member_model import TeamMember
 from app.model.team_model import Team
 from app.model.user_model import User
+from app.model.notification_model import Notification
 from app.schemas.sms_schemas import (
     DirectConversationOut,
     DirectSmsCreate,
@@ -17,6 +18,13 @@ from app.schemas.sms_schemas import (
 )
 
 router = APIRouter(prefix="/sms", tags=["SMS"])
+
+
+def _display_name_from_email(email: str) -> str:
+    local = (email or "").split("@")[0].strip()
+    if not local:
+        return "User"
+    return local[:1].upper() + local[1:]
 
 
 def _assert_user_exists(db: Session, email: str) -> None:
@@ -60,12 +68,44 @@ def send_direct_sms(
 
     _assert_user_exists(db, recipient)
 
+    sender_user = db.query(User).filter(User.email == current_user_email).first()
+    recipient_user = db.query(User).filter(User.email == recipient).first()
+
     sms = SmsMessage(
         sender_email=current_user_email,
         recipient_email=recipient,
         message=message,
     )
     db.add(sms)
+    db.flush()
+
+    sender_name = _display_name_from_email(current_user_email)
+    recipient_name = _display_name_from_email(recipient)
+
+    if sender_user:
+        db.add(
+            Notification(
+                user_id=sender_user.id,
+                title="Message Sent",
+                message=f"You messaged to {recipient_name}",
+                type="sms",
+                reference_id=sms.id,
+                is_read=False,
+            )
+        )
+
+    if recipient_user:
+        db.add(
+            Notification(
+                user_id=recipient_user.id,
+                title="New Message",
+                message=f"{sender_name} sent you a message",
+                type="sms",
+                reference_id=sms.id,
+                is_read=False,
+            )
+        )
+
     db.commit()
     db.refresh(sms)
     return sms
@@ -147,7 +187,7 @@ def send_team_sms(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email),
 ):
-    _assert_team_member(db, team_id, current_user_email)
+    team = _assert_team_member(db, team_id, current_user_email)
     message = payload.message.strip()
     if not message:
         raise HTTPException(status_code=400, detail="Message is required")
@@ -158,6 +198,44 @@ def send_team_sms(
         message=message,
     )
     db.add(sms)
+    db.flush()
+
+    sender_user = db.query(User).filter(User.email == current_user_email).first()
+    sender_name = _display_name_from_email(current_user_email)
+
+    members = (
+        db.query(TeamMember)
+        .filter(TeamMember.team_id == team_id)
+        .all()
+    )
+
+    if sender_user:
+        db.add(
+            Notification(
+                user_id=sender_user.id,
+                title="Team Message Sent",
+                message=f"You messaged to team '{team.team_name}'",
+                type="sms",
+                reference_id=team_id,
+                is_read=False,
+            )
+        )
+
+    for member in members:
+        if sender_user and member.user_id == sender_user.id:
+            continue
+
+        db.add(
+            Notification(
+                user_id=member.user_id,
+                title="Team Message",
+                message=f"{sender_name} sent a message in '{team.team_name}'",
+                type="sms",
+                reference_id=team_id,
+                is_read=False,
+            )
+        )
+
     db.commit()
     db.refresh(sms)
     return sms

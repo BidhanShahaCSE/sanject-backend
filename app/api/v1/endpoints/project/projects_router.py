@@ -163,6 +163,41 @@ def get_all_projects(
 ):
     return db.query(Project).filter(Project.owner_email == current_user_email).all()
 
+
+@router.get("/{project_id}/my-member-info")
+def get_my_project_member_info(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    if project.owner_email == current_user_email:
+        return {
+            "role": "Owner",
+            "description": "",
+            "is_owner": True,
+        }
+
+    member = (
+        db.query(ProjectMember)
+        .filter(
+            ProjectMember.project_id == project_id,
+            ProjectMember.email == current_user_email,
+        )
+        .first()
+    )
+    if not member:
+        raise HTTPException(status_code=404, detail="Member info not found")
+
+    return {
+        "role": member.role or "Member",
+        "description": member.description or "",
+        "is_owner": False,
+    }
+
 # 🚀 ৪. প্রজেক্টের তথ্য আপডেট করা
 @router.patch("/{project_id}", response_model=ProjectResponse)
 def update_project(
