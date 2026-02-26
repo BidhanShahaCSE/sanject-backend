@@ -40,6 +40,17 @@ class LoginResponse(BaseModel):
     user_id: int
     role: str
 
+
+class MeResponse(BaseModel):
+    user_id: int
+    email: EmailStr
+    role: str
+
+
+class MeUpdateRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    new_password: Optional[str] = None
+
 # -------------------------
 # Helper Functions for Token
 # -------------------------
@@ -106,3 +117,56 @@ def logout(
         return {"message": "Logged out successfully"}
     
     raise HTTPException(status_code=404, detail="User not found")
+
+
+@router.get("/me", response_model=MeResponse)
+def get_my_profile(
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "role": user.role,
+    }
+
+
+@router.patch("/me", response_model=MeResponse)
+def update_my_profile(
+    payload: MeUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.email is not None:
+        new_email = payload.email.strip().lower()
+        if new_email != user.email.lower():
+            existing = db.query(User).filter(User.email == new_email).first()
+            if existing:
+                raise HTTPException(status_code=400, detail="Email already registered")
+            user.email = new_email
+
+    if payload.new_password is not None:
+        new_password = payload.new_password.strip()
+        if len(new_password) < 6:
+            raise HTTPException(
+                status_code=400,
+                detail="Password must be at least 6 characters long",
+            )
+        user.password = pwd_context.hash(new_password)
+
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "user_id": user.id,
+        "email": user.email,
+        "role": user.role,
+    }
