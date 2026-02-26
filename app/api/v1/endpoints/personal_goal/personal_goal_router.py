@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.database import get_db
 from app.model.personal_goal_model import PersonalGoal
-from app.model.user_model import User  # 🚀 ইউজার আইডি পাওয়ার জন্য
-from app.model.notification_model import Notification # 🔔 নোটিফিকেশন পাঠানোর জন্য
+from app.model.user_model import User  # 🚀 To get User ID
+from app.model.notification_model import Notification # 🔔 To send notifications
 from app.schemas.personal_goal_schemas import PersonalGoalCreate, PersonalGoalUpdate, PersonalGoalOut
 
-# 🛡️ আপনার তৈরি করা টোকেন যাচাইকারী ফাংশনটি ইম্পোর্ট করুন
+# 🛡️ Import the token validator function you created
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
 router = APIRouter(
@@ -15,14 +15,14 @@ router = APIRouter(
     tags=["Personal Goals"]
 )
 
-# 🚀 ১. নতুন পার্সোনাল গোল তৈরি করা (Access Token চেক এবং নোটিফিকেশন সহ)
+# 🚀 1. Creating New Personal Goals (with Access Token Checks and Notifications)
 @router.post("/", response_model=PersonalGoalOut, status_code=status.HTTP_201_CREATED)
 def create_personal_goal(
     goal_data: PersonalGoalCreate, 
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user_email) # 🔒 টোকেন চেক
+    current_user_email: str = Depends(get_current_user_email) # 🔒 Token check
 ):
-    # টোকেনের ইমেইল দিয়ে ইউজার আইডি খুঁজে বের করা
+    # Finding user id with token email
     user = db.query(User).filter(User.email == current_user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -39,7 +39,7 @@ def create_personal_goal(
         db.commit()
         db.refresh(new_goal)
 
-        # 🔔 ওনারের কাছে সাকসেস নোটিফিকেশন পাঠানো
+        # 🔔 Sending success notification to owner
         new_notification = Notification(
             user_id=user.id,
             title="Goal Set Successfully",
@@ -56,11 +56,11 @@ def create_personal_goal(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Creation failed: {str(e)}")
 
-# 🚀 ২. ইউজারের সব গোল দেখা (Access Token অনুযায়ী ফিল্টার)
+# 🚀 2. View all user goals (filter by Access Token)
 @router.get("/", response_model=List[PersonalGoalOut])
 def get_personal_goals(
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user_email) # 🔒 টোকেন চেক
+    current_user_email: str = Depends(get_current_user_email) # 🔒 Token check
 ):
     return db.query(PersonalGoal).filter(PersonalGoal.owner_email == current_user_email).all()
 
@@ -79,13 +79,13 @@ def get_personal_goal_by_id(
         raise HTTPException(status_code=404, detail="Goal not found or unauthorized")
     return goal
 
-# 🚀 ৩. গোল আপডেট করা (মালিকানা যাচাই Access Token দিয়ে)
+# 3. Goal Update (Ownership Verification with Access Token)
 @router.patch("/{goal_id}", response_model=PersonalGoalOut)
 def update_personal_goal(
     goal_id: int, 
     goal_data: PersonalGoalUpdate, 
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user_email) # 🔒 টোকেন চেক
+    current_user_email: str = Depends(get_current_user_email) # 🔒 Token check
 ):
     goal_query = db.query(PersonalGoal).filter(
         PersonalGoal.id == goal_id, 

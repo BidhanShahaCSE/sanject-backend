@@ -6,7 +6,7 @@ class ReminderBase(BaseModel):
     name: str
     description: Optional[str] = None
     reminder_date: date
-    reminder_time: time # 🚀 সময় যুক্ত করা হয়েছে
+    reminder_time: time # 🚀 Added time
     owner_email: EmailStr
 
 class ReminderCreate(ReminderBase):

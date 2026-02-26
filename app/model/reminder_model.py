@@ -9,7 +9,7 @@ class Reminder(Base):
     name = Column(String, nullable=False)
     description = Column(Text)
     reminder_date = Column(Date, nullable=False)
-    reminder_time = Column(Time, nullable=False) # 🚀 নতুন সময় কলাম
+    reminder_time = Column(Time, nullable=False) # 🚀 New time column
     owner_email = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

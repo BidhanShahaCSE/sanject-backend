@@ -29,10 +29,10 @@ router = APIRouter(
 ALLOWED_TASK_TYPES = ["Assignment", "Lab Report", "Exam", "Home Work"]
 
 # ----------------------------------------------------------------
-# 🚀 ১. মেইন অ্যাসাইনমেন্ট সেকশন (Main Assignment Section)
+# 🚀 1. Main Assignment Section
 # ----------------------------------------------------------------
 
-# অ্যাসাইনমেন্ট তৈরি করা
+# Creating Assignments
 @router.post("/", response_model=AssignmentOut, status_code=status.HTTP_201_CREATED)
 def create_assignment(
     data: AssignmentCreate, 
@@ -61,7 +61,7 @@ def create_assignment(
         db.commit()
         db.refresh(new_assignment)
 
-        # মালিকের জন্য নোটিফিকেশন
+        # Notification to owner
         owner_notification = Notification(
             user_id=owner.id,
             title="Assignment Created",
@@ -72,7 +72,7 @@ def create_assignment(
         )
         db.add(owner_notification)
 
-        # মেম্বারদের জন্য নোটিফিকেশন
+        # Notification to Members
         if new_assignment.org_id:
             org_members = db.query(ProjectMember).filter(ProjectMember.project_id == new_assignment.org_id).all()
             for member_entry in org_members:
@@ -94,12 +94,12 @@ def create_assignment(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# সব অ্যাসাইনমেন্টের লিস্ট দেখা
+# View a list of all assignments
 @router.get("/", response_model=List[AssignmentOut])
 def get_all_assignments(db: Session = Depends(get_db)):
     return db.query(Assignment).all()
 
-# নির্দিষ্ট আইডি দিয়ে অ্যাসাইনমেন্ট দেখা
+# View assignments with specific IDs
 @router.get("/{assignment_id}", response_model=AssignmentOut)
 def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
     assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
@@ -125,7 +125,7 @@ def get_subtasks_by_assignment(
     )
     return subtasks
 
-# অ্যাসাইনমেন্ট ডিলিট করা
+# Deleting assignments
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_assignment(
     assignment_id: int, 
@@ -145,7 +145,7 @@ def delete_assignment(
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 # ----------------------------------------------------------------
-# 🚀 ২. সাব-টাস্ক সেকশন (Sub-Task Section)
+# 🚀 2. Sub-Task Section
 # ----------------------------------------------------------------
 
 @router.post("/subtasks/upload-file", response_model=AssignmentSubTaskOut)
@@ -236,7 +236,7 @@ def delete_subtask(
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 # ----------------------------------------------------------------
-# 🚀 ৩. সাবমিশন এবং ইস্যু রিপোর্টিং (Submission & Reporting)
+# 3. Submission & Reporting
 # ----------------------------------------------------------------
 
 @router.post("/subtasks/{subtask_id}/complete-submission")

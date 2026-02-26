@@ -8,7 +8,7 @@ from typing import Optional
 
 from app.db.database import get_db
 from app.model.user_model import User
-# 🛡️ টোকেন যাচাইয়ের জন্য আপনার তৈরি করা ইউটিলস ইম্পোর্ট করুন
+# 🛡️ Import your created utilities for token verification
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
 router = APIRouter(
@@ -18,11 +18,11 @@ router = APIRouter(
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# 🔐 JWT কনফিগারেশন
+# 🔐 JWT configuration
 SECRET_KEY = "your_super_secret_key" 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60      # ১ ঘণ্টা
-REFRESH_TOKEN_EXPIRE_DAYS = 30        # ৩০ দিন
+ACCESS_TOKEN_EXPIRE_MINUTES = 60      # 1 hour
+REFRESH_TOKEN_EXPIRE_DAYS = 30        # 30 days
 
 # -------------------------
 # Schemas
@@ -65,11 +65,11 @@ class MeUpdateRequest(BaseModel):
 # Helper Functions for Token
 # -------------------------
 def create_tokens(email: str):
-    # ১. Access Token তৈরি
+    # 1. Access Token generation
     access_expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = jwt.encode({"sub": email, "exp": access_expire}, SECRET_KEY, algorithm=ALGORITHM)
     
-    # ২. Refresh Token তৈরি
+    # 2. Generate Refresh Token
     refresh_expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     refresh_token = jwt.encode({"sub": email, "exp": refresh_expire}, SECRET_KEY, algorithm=ALGORITHM)
     
@@ -81,12 +81,12 @@ def create_access_token_only(email: str):
     return jwt.encode({"sub": email, "exp": access_expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 # -------------------------
-# Login Route (আপনার নিয়ম অনুযায়ী JSON বডি ব্যবহার করে)
+# Login Route (using JSON body according to your rules)
 # -------------------------
 
 @router.post("/login", response_model=LoginResponse)
 def login_user(data: LoginRequest, db: Session = Depends(get_db)):
-    # ১. ইউজার খুঁজে বের করা
+    # 1. Find users
     user = db.query(User).filter(User.email == data.email).first()
 
     if not user or not pwd_context.verify(data.password, user.password):
@@ -95,10 +95,10 @@ def login_user(data: LoginRequest, db: Session = Depends(get_db)):
             detail="Invalid email or password"
         )
 
-    # ২. টোকেন দুটি জেনারেট করা
+    # 2. Generate two tokens
     access_token, refresh_token = create_tokens(user.email)
 
-    # ৩. ডাটাবেসে রিফ্রেশ টোকেন সেভ করা 🛡️
+    # 3. Saving refresh token in database 🛡️
     user.refresh_token = refresh_token
     try:
         db.commit()
@@ -106,7 +106,7 @@ def login_user(data: LoginRequest, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail="Could not save session")
 
-    # ৪. রেসপন্স পাঠানো
+    # 4. Send response
     return {
         "message": "Login successful",
         "access_token": access_token,
@@ -144,17 +144,17 @@ def refresh_access_token(data: TokenRefreshRequest, db: Session = Depends(get_db
     }
 
 # -------------------------
-# Logout Route (টোকেন চেক সহ নিরাপদ ভার্সন)
+# Logout Route (secure version with token check)
 # -------------------------
 
 @router.post("/logout")
 def logout(
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user_email) # 🔒 টোকেন ছাড়া লগআউট করা যাবে না
+    current_user_email: str = Depends(get_current_user_email) # 🔒 Cannot logout without token
 ):
     user = db.query(User).filter(User.email == current_user_email).first()
     if user:
-        user.refresh_token = None # 🛡️ সেশনটি চিরতরে বন্ধ করে দেওয়া হলো
+        user.refresh_token = None # 🛡️ The session has been closed permanently
         db.commit()
         return {"message": "Logged out successfully"}
     

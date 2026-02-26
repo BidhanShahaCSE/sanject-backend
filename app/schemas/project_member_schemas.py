@@ -10,4 +10,4 @@ class MemberUpdateDetails(BaseModel):
     deadline: date
 
 class ProjectMembersUpdateList(BaseModel):
-    members: List[MemberUpdateDetails] # 👈 এটি লিস্ট আকারে একাধিক মেম্বার নিবে
+    members: List[MemberUpdateDetails] # 👈 It will take multiple members in list form

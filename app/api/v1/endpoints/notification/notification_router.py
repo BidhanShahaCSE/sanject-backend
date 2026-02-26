@@ -8,7 +8,7 @@ from app.model.user_model import User
 from app.schemas.notification_schemas import DeviceTokenUpdate, NotificationCreate, NotificationOut, NotificationUpdate
 from sqlalchemy.exc import SQLAlchemyError
 
-# 🛡️ টোকেন থেকে ইউজার ইমেইল পাওয়ার ডিপেন্ডেন্সি
+# 🛡️ Token to user email power dependency
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
 router = APIRouter(
@@ -40,22 +40,22 @@ def save_device_token(
 
     return {"message": "Device token saved successfully."}
 
-# 🚀 ১. শুধুমাত্র নিজের নোটিফিকেশনগুলো দেখা (UI ডিজাইন অনুযায়ী)
+# 🚀 1. Viewing only own notifications (according to UI design)
 @router.get("/", response_model=List[NotificationOut])
 def get_my_notifications(
     db: Session = Depends(get_db),
-    current_user_email: str = Depends(get_current_user_email) # 🔒 টোকেন চেক
+    current_user_email: str = Depends(get_current_user_email) # 🔒 Token check
 ):
-    # টোকেনের ইমেইল দিয়ে ইউজার আইডি খুঁজে বের করা
+    # Finding user id with token email
     user = db.query(User).filter(User.email == current_user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # ডিজাইন অনুযায়ী ইউজারের সব নোটিফিকেশন লিস্ট রিটার্ন করা
+    # Returning all user notification list as per design
     return db.query(Notification).filter(Notification.user_id == user.id).order_by(Notification.created_at.desc()).all()
 
 
-# 🚀 ২. নোটিফিকেশন "Read" হিসেবে মার্ক করা (যখন ইউজার 'view details' এ ক্লিক করবে)
+# 🚀 2. Marking the notification as "Read" (when the user clicks on 'view details')
 @router.patch("/{notification_id}/read", response_model=NotificationOut)
 def mark_as_read(
     notification_id: int,
@@ -80,7 +80,7 @@ def mark_as_read(
 
 
 
-# 🚀 ৪. পুরনো নোটিফিকেশন ডিলিট করা
+# 🚀 4. Delete old notifications
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_notification(
     notification_id: int,

@@ -17,7 +17,7 @@ router = APIRouter(
     tags=["Projects"]
 )
 
-# 🚀 ১. নতুন প্রজেক্ট তৈরি করা (মেম্বার ভ্যালিডেশন এবং ওনারসহ সবার নোটিফিকেশন)
+# 🚀 1. Creating new projects (member validation and notification to all including owner)
 @router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
 def create_project(
     project_data: ProjectCreate, 
@@ -55,7 +55,7 @@ def create_project(
         db.commit()
         db.refresh(new_project)
 
-        # ১. ProjectMember table-এ এন্ট্রি দেওয়া
+        # 1. Adding entries to the ProjectMember table
         for email in project_data.members_email:
             new_member_entry = ProjectMember(
                 project_id=new_project.id,
@@ -67,7 +67,7 @@ def create_project(
             )
             db.add(new_member_entry)
         
-        # 🔔 ২. মেম্বারদের নোটিফিকেশন পাঠানো
+        # 2. Sending notifications to members
         for member in member_users:
             new_notification = Notification(
                 user_id=member.id,
@@ -79,7 +79,7 @@ def create_project(
             )
             db.add(new_notification)
 
-        # 🔔 ৩. ওনারের নিজের জন্য নোটিফিকেশন পাঠানো 🚀
+        # 3. Sending notifications to owner 🚀
         owner_notification = Notification(
             user_id=user.id,
             title="Project Created Successfully",
@@ -96,7 +96,7 @@ def create_project(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-# 🚀 ২. মেম্বারদের দায়িত্ব আপডেট করা (নোটিফিকেশন সহ)
+# 🚀 2. Updating Member Responsibilities (including Notification)
 @router.patch("/{project_id}/update-members-details")
 def update_members_details(
     project_id: int, 
@@ -137,7 +137,7 @@ def update_members_details(
             )
             db.add(new_member)
         
-        # 🔔 মেম্বারের রেসপনসিবিলিটি আপডেটের নোটিফিকেশন
+        # 🔔 Member Responsibility Update Notification
         update_notif = Notification(
             user_id=registered_user.id,
             title="Project Role Updated",
@@ -155,7 +155,7 @@ def update_members_details(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 ৩. সব প্রজেক্ট দেখা
+# 3. View all projects
 @router.get("/", response_model=List[ProjectResponse])
 def get_all_projects(
     db: Session = Depends(get_db),
@@ -198,7 +198,7 @@ def get_my_project_member_info(
         "is_owner": False,
     }
 
-# 🚀 ৪. প্রজেক্টের তথ্য আপডেট করা
+# 🚀 4. Updating project information
 @router.patch("/{project_id}", response_model=ProjectResponse)
 def update_project(
     project_id: int, 
@@ -225,7 +225,7 @@ def update_project(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
-# 🚀 ৫. প্রজেক্ট ডিলিট করা
+# 5. Delete the project
 @router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_project(
     project_id: int, 

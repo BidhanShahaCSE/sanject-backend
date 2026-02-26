@@ -1,20 +1,20 @@
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 
-# ১. লগইন রিকোয়েস্ট স্কিমা (আগের মতোই থাকবে)
+# 1. Login Request Schema (remains as before)
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
 
-# ২. লগইন রেসপন্স স্কিমা (পরিবর্তন করতে হবে) 🚀
+# 2. Login Response Schema (to be changed) 🚀
 class LoginResponse(BaseModel):
     message: str
-    access_token: str        # স্বল্পমেয়াদী টোকেন
-    refresh_token: str       # দীর্ঘমেয়াদী টোকেন (নতুন যোগ করা হয়েছে)
+    access_token: str        # Short term token
+    refresh_token: str       # Long Term Token (newly added)
     token_type: str = "bearer"
     user_id: int
     role: str
 
-# ৩. টোকেন রিফ্রেশ করার জন্য নতুন স্কিমা 🚀
+# 3. New schema for refreshing tokens 🚀
 class TokenRefreshRequest(BaseModel):
     refresh_token: str

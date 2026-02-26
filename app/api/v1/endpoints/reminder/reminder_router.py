@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List
 from app.db.database import get_db
 from app.model.reminder_model import Reminder
-from app.model.user_model import User  # 🚀 ইউজার আইডি পাওয়ার জন্য
-from app.model.notification_model import Notification # 🔔 নোটিফিকেশন পাঠানোর জন্য
+from app.model.user_model import User  # 🚀 To get User ID
+from app.model.notification_model import Notification # 🔔 To send notifications
 from app.schemas.reminder_schemas import ReminderCreate, ReminderUpdate, ReminderResponse
 
-# 🛡️ আপনার auth ফাইল থেকে টোকেন ভ্যালিডেশন ফাংশনটি ইম্পোর্ট করুন
+# 🛡️ Import the token validation function from your auth file
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email     
 
 router = APIRouter(
@@ -15,14 +15,14 @@ router = APIRouter(
     tags=["Reminders"]
 )
 
-# 🚀 ১. নতুন রিমাইন্ডার তৈরি করা (এবং ওনারের কাছে নোটিফিকেশন পাঠানো)
+# 🚀 1. Creating new reminders (and sending notifications to owners)
 @router.post("/", response_model=ReminderResponse, status_code=status.HTTP_201_CREATED)
 def create_reminder(
     reminder_data: ReminderCreate, 
     db: Session = Depends(get_db),
-    current_email: str = Depends(get_current_user_email) # 🔒 Access Token চেক
+    current_email: str = Depends(get_current_user_email) # 🔒 Access Token check
 ):
-    # টোকেনের ইমেইল দিয়ে ইউজার আইডি খুঁজে বের করা
+    # Finding user id with token email
     user = db.query(User).filter(User.email == current_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -32,14 +32,14 @@ def create_reminder(
         description=reminder_data.description,
         reminder_date=reminder_data.reminder_date,
         reminder_time=reminder_data.reminder_time,
-        owner_email=current_email # 🛡️ টোকেন থেকে প্রাপ্ত ইমেইল ব্যবহার হচ্ছে
+        owner_email=current_email # 🛡️ Using email received from token
     )
     try:
         db.add(new_reminder)
         db.commit()
         db.refresh(new_reminder)
 
-        # 🔔 ওনারের কাছে সাকসেস নোটিফিকেশন পাঠানো
+        # 🔔 Sending success notification to owner
         new_notification = Notification(
             user_id=user.id,
             title="Reminder Set",
@@ -56,20 +56,20 @@ def create_reminder(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 ২. শুধুমাত্র নিজের রিমাইন্ডারগুলো দেখা (Access Token অনুযায়ী ফিল্টার)
+# 🚀 2. View only your own reminders (filter by Access Token)
 @router.get("/", response_model=List[ReminderResponse])
 def get_all_reminders(
     db: Session = Depends(get_db),
-    current_email: str = Depends(get_current_user_email) # 🔒 Access Token চেক
+    current_email: str = Depends(get_current_user_email) # 🔒 Access Token check
 ):
     return db.query(Reminder).filter(Reminder.owner_email == current_email).all()
 
-# 🚀 ৩. রিমাইন্ডার ডিলিট করা (Access Token দিয়ে মালিকানা যাচাই)
+# 3. Deleting Reminders (Verifying Ownership with Access Token)
 @router.delete("/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_reminder(
     reminder_id: int, 
     db: Session = Depends(get_db),
-    current_email: str = Depends(get_current_user_email) # 🔒 Access Token চেক
+    current_email: str = Depends(get_current_user_email) # 🔒 Access Token check
 ):
     reminder = db.query(Reminder).filter(
         Reminder.id == reminder_id, 

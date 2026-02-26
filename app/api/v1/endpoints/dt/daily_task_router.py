@@ -9,12 +9,12 @@ from app.model.user_model import User
 from app.model.notification_model import Notification
 from app.schemas.daily_task_schemas import DailyTaskCreate, DailyTaskOut, DailyTaskUpdate
 
-# 🛡️ টোকেন থেকে ইউজার ভেরিফিকেশন
+# 🛡️ Token to User Verification
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
 router = APIRouter(tags=["Daily Tasks"])
 
-# 🚀 ১. নতুন ডেইলি টাস্ক তৈরি করা
+# 🚀 1. Creating a new Daily Task
 @router.post("/daily-tasks/", response_model=DailyTaskOut, status_code=status.HTTP_201_CREATED)
 @router.post("/dt/", response_model=DailyTaskOut, status_code=status.HTTP_201_CREATED)
 def create_daily_task(
@@ -39,7 +39,7 @@ def create_daily_task(
         db.commit()
         db.refresh(new_task)
 
-        # 🔔 নোটিফিকেশন পাঠানো
+        # 🔔 Notification sending
         new_notification = Notification(
             user_id=user.id,
             title="Task Created Successfully",
@@ -57,7 +57,7 @@ def create_daily_task(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
-# 🚀 ২. ইউজারের সব ডেইলি টাস্কের লিস্ট দেখা
+# 🚀 2. View a list of all the user's daily tasks
 @router.get("/daily-tasks/", response_model=List[DailyTaskOut])
 @router.get("/dt/", response_model=List[DailyTaskOut])
 def get_my_daily_tasks(
@@ -69,7 +69,7 @@ def get_my_daily_tasks(
     ).order_by(DailyTask.task_date.desc()).all()
 
 
-# 🚀 ৩. নির্দিষ্ট টাস্ক আপডেট করা (সব ফিল্ড সহ)
+# 3. Updating specific tasks (including all fields)
 @router.patch("/daily-tasks/{task_id}", response_model=DailyTaskOut)
 @router.patch("/dt/{task_id}", response_model=DailyTaskOut)
 def update_daily_task(
@@ -84,7 +84,7 @@ def update_daily_task(
     if not db_task:
         raise HTTPException(status_code=404, detail="Task not found or unauthorized")
 
-    # 🚀 exclude_unset=True দিলে শুধু যে ফিল্ডগুলো ইউজার পাঠাবে সেগুলোই আপডেট হবে
+    # 🚀 If exclude_unset=True, only the fields sent by the user will be updated
     update_data = task_data.model_dump(exclude_unset=True)
     
     try:
@@ -97,7 +97,7 @@ def update_daily_task(
         raise HTTPException(status_code=500, detail=f"Update failed: {str(e)}")
 
 
-# 🚀 ৪. ডেইলি টাস্ক ডিলিট করা
+# 🚀 4. Deleting Daily Tasks
 @router.delete("/daily-tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 @router.delete("/dt/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_daily_task(

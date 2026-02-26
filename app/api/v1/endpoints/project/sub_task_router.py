@@ -7,7 +7,7 @@ import os
 from app.db.database import get_db
 from app.model.project_model import Project
 from app.model.project_member_model import ProjectMember
-from app.model.subtask_model import SubTask # আপনার দেওয়া নতুন মডেল
+from app.model.subtask_model import SubTask # Your new model
 from app.model.user_model import User 
 from app.model.notification_model import Notification 
 
@@ -19,7 +19,7 @@ router = APIRouter(
     tags=["Project SubTasks"]
 )
 
-# 🚀 ১. সাব-টাস্ক আপলোড করা (শুধুমাত্র মেম্বাররা পারবে)
+# 🚀 1. Uploading sub-tasks (only members can)
 @router.post("/upload", status_code=status.HTTP_201_CREATED)
 async def upload_subtask(
     project_id: int = Form(...),
@@ -29,7 +29,7 @@ async def upload_subtask(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
-    # মেম্বার চেক করা (মেম্বার না হলে আপলোড করতে পারবে না)
+    # Member Checking (Can't upload if not a member)
     member = db.query(ProjectMember).filter(
         ProjectMember.project_id == project_id, 
         ProjectMember.email == current_user_email
@@ -38,7 +38,7 @@ async def upload_subtask(
     if not member:
         raise HTTPException(status_code=403, detail="Only assigned members can upload subtasks.")
 
-    # ফাইল সেভ করার লজিক (আপনার পাথ অনুযায়ী পরিবর্তন করে নিবেন)
+    # File saving logic (change according to your path)
     upload_dir = "uploads/subtasks"
     if not os.path.exists(upload_dir):
         os.makedirs(upload_dir)
@@ -59,12 +59,12 @@ async def upload_subtask(
         db.commit()
         db.refresh(new_subtask)
 
-        # 🔔 ২. নোটিফিকেশন: শুধুমাত্র ওই প্রজেক্টের মেম্বারদের মাঝে যাবে
+        # 2. Notification: will only go to members of that project
         project = db.query(Project).filter(Project.id == project_id).first()
         all_members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
         
         for m in all_members:
-            if m.email != current_user_email: # নিজের কাছে পাঠাবে না
+            if m.email != current_user_email: # Do not send to yourself
                 target_user = db.query(User).filter(User.email == m.email).first()
                 if target_user:
                     db.add(Notification(
@@ -82,7 +82,7 @@ async def upload_subtask(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 ৩. টোটাল প্রজেক্ট সাবমিট করা (ওনার ও মেম্বার সবাই নোটিফিকেশন পাবে)
+# 3. Total Project Submission (Owner and all members will get notification)
 @router.post("/{project_id}/final-submit")
 def final_project_submit(
     project_id: int,
@@ -93,12 +93,12 @@ def final_project_submit(
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # ওনারের আইডি এবং মেম্বারদের আইডি বের করা
+    # Extract Owner ID and Members ID
     owner = db.query(User).filter(User.id == project.owner_id).first()
     members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
 
     try:
-        # 🔔 ওনারকে নোটিফিকেশন পাঠানো
+        # 🔔 Sending notifications to him
         db.add(Notification(
             user_id=owner.id,
             title="Project Fully Submitted",
@@ -108,7 +108,7 @@ def final_project_submit(
             is_read=False
         ))
 
-        # 🔔 সব মেম্বারদের নোটিফিকেশন পাঠানো
+        # 🔔 Sending notifications to all members
         for m in members:
             m_user = db.query(User).filter(User.email == m.email).first()
             if m_user:
@@ -127,14 +127,14 @@ def final_project_submit(
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 ৪. ম্যানেজার এবং মেম্বারদের জন্য সাব-প্রজেক্ট দেখার এন্ডপয়েন্ট
-@router.get("/{project_id}/view-all", response_model=List[dict]) # এখানে ডিকশনারি বদলে আপনার স্কিমা দিতে পারেন
+# 🚀 4. Sub-project viewing endpoint for managers and members
+@router.get("/{project_id}/view-all", response_model=List[dict]) # Here you can replace the dictionary with your schema
 def get_subtasks(
     project_id: int,
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
-    # ইউজার কি ওই প্রজেক্টের ওনার, ম্যানেজার নাকি মেম্বার তা চেক করা
+    # Check whether the user is the owner, manager or member of the project
     is_owner = db.query(Project).filter(Project.id == project_id, Project.owner_email == current_user_email).first()
     is_member = db.query(ProjectMember).filter(ProjectMember.project_id == project_id, ProjectMember.email == current_user_email).first()
 

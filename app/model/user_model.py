@@ -8,5 +8,5 @@ class User(Base):
     email = Column(String, unique=True, index=True, nullable=False)
     password = Column(String, nullable=False)
     role = Column(String, default="user")
-    # 🚀 এই কলামটি যোগ করুন
+    # 🚀 Add this column
     refresh_token = Column(String, nullable=True)

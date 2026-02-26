@@ -93,18 +93,18 @@ def signup_user(data: SignUpRequest, db: Session = Depends(get_db)):
 
 
         else:
-            # 🛑 যদি এই ৪টির বাইরে কোনো রোল হয়, তবে সরাসরি এরর দেব
-            db.rollback() # আগের ইউজার অ্যাড করার চেষ্টা বাতিল করে দেবে
+            # 🛑 If there is any roll outside of these 4, it will throw an error directly
+            db.rollback() # Previous user add attempts will be canceled
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Role '{data.role}' is not allowed. Choose student, teacher, manager, employee, or organization."
             )
-        # রোল স্পেসিফিক টেবিলে সেভ করার জন্য ফাইনাল কমিট
+        # Final commit to save to role specific table
         if data.role in ["student", "teacher", "manager", "employee", "organization"]:
             db.commit()
 
     except Exception as e:
-        # যদি কোনো কারণে ফেইল করে, তাহলে ইউজার ক্রিয়েট হওয়াটাও বাতিল করে দেব
+        # If it fails for some reason, then I will also cancel the user creation
         db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

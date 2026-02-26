@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr
 from datetime import datetime
 from typing import Optional
 
-# 🛡️ টোকেন থেকে ইমেইল পাওয়ার ডিপেন্ডেন্সি ইম্পোর্ট করুন
+# 🛡️ Import email power dependencies from tokens
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
 router = APIRouter(
@@ -36,7 +36,7 @@ class NoteResponse(BaseModel):
         from_attributes = True
 
 
-# 🚀 ১. নতুন নোট তৈরি করা
+# 🚀 1. Create a new note
 @router.post("/", response_model=NoteResponse, status_code=status.HTTP_201_CREATED)
 def create_note(
     note_data: NoteCreate, 
@@ -74,7 +74,7 @@ def create_note(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# 🚀 ২. নোটের কন্টেন্ট আপডেট করা
+# 🚀 2. Updating the content of the note
 @router.patch("/{note_id}/write", response_model=NoteResponse)
 def write_note_content(
     note_id: int, 
@@ -95,7 +95,7 @@ def write_note_content(
     db.refresh(db_note)
     return db_note
 
-# এটি তোর fastapi router ফাইলে যোগ কর
+# Add this to your fastapi router file
 @router.patch("/{note_id}/write", response_model=NoteResponse)
 def update_note_content(
     note_id: int, 
@@ -111,7 +111,7 @@ def update_note_content(
     db.commit()
     db.refresh(db_note)
     return db_note
-# 🚀 ৩. ইউজারের সব নোটের লিস্ট দেখা
+# 3. View a list of all user notes
 @router.get("/", response_model=List[NoteResponse])
 def get_user_notes(
     db: Session = Depends(get_db),
@@ -120,7 +120,7 @@ def get_user_notes(
     return db.query(Note).filter(Note.owner_email == current_user_email).all()
 
 
-# 🚀 ৪. নির্দিষ্ট নোট ডিলিট করা
+# 🚀 4. Delete specific notes
 @router.delete("/{note_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_note(
     note_id: int, 
@@ -147,7 +147,7 @@ def delete_note(
         raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
 
 
-# 🚀 ৫. note id দিয়ে note details দেখা (NEW API)
+# 5. View note details by note id (NEW API)
 @router.get("/{note_id}", response_model=NoteResponse)
 def get_note_details(
     note_id: int,

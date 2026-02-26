@@ -18,23 +18,23 @@ from app.api.v1.endpoints.auth.auth_utils import get_current_user_email
 
 router = APIRouter(prefix="/profile", tags=["Profile Setup"])
 
-# 🛡️ কমন ফাংশন: রোল চেক এবং ডাটা সিনক্রোনাইজেশন
+# 🛡️ Common functions: roll check and data synchronization
 def secure_profile_sync(db: Session, email: str, target_role: str, model, data_dict: dict, profile_name: str):
     user = db.query(User).filter(User.email == email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     
-    # 🚨 রোল ভ্যালিডেশন: ভুল রোলের ইউজার ভুল এন্ডপয়েন্টে ঢুকলে এরর দিবে
+    # 🚨 Role Validation: User with wrong role will get error if they enter wrong endpoint
     if user.role.lower() != target_role.lower():
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail=f"Forbidden: Your role is '{user.role}', cannot access '{target_role}' setup."
         )
 
-    # ইউজারের নাম আপডেট (সেটআপ পেজ থেকে আসা নাম)
+    # Update username (name from setup page)
     user.name = profile_name
 
-    # ডুপ্লিকেট ফিক্স: নতুন রো না বানিয়ে আগের রো আপডেট করা
+    # Duplicate Fix: Updating previous row without creating new row
     existing = db.query(model).filter(model.user_id == user.id).first()
     
     if existing:
@@ -51,27 +51,27 @@ def secure_profile_sync(db: Session, email: str, target_role: str, model, data_d
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
-# 🚀 ১. Student প্রোফাইল সেটআপ
+# 🚀 1. Student profile setup
 @router.post("/setup/student")
 def setup_student(profile_name: str, data: StudentCreate, db: Session = Depends(get_db), email: str = Depends(get_current_user_email)):
     return secure_profile_sync(db, email, "student", Student, data.model_dump(), profile_name)
 
-# 🚀 ২. Teacher প্রোফাইল সেটআপ
+# 🚀 2. Teacher profile setup
 @router.post("/setup/teacher")
 def setup_teacher(profile_name: str, data: TeacherCreate, db: Session = Depends(get_db), email: str = Depends(get_current_user_email)):
     return secure_profile_sync(db, email, "teacher", Teacher, data.model_dump(), profile_name)
 
-# 🚀 ৩. Manager প্রোফাইল সেটআপ
+# 3. Manager profile setup
 @router.post("/setup/manager")
 def setup_manager(profile_name: str, data: ManagerCreate, db: Session = Depends(get_db), email: str = Depends(get_current_user_email)):
     return secure_profile_sync(db, email, "manager", Manager, data.model_dump(), profile_name)
 
-# 🚀 ৪. Employee প্রোফাইল সেটআপ
+# 🚀 4. Employee profile setup
 @router.post("/setup/employee")
 def setup_employee(profile_name: str, data: EmployeeCreate, db: Session = Depends(get_db), email: str = Depends(get_current_user_email)):
     return secure_profile_sync(db, email, "employee", Employee, data.model_dump(), profile_name)
 
-# 🚀 ৫. Organization প্রোফাইল সেটআপ
+# 5. Organization profile setup
 @router.post("/setup/organization")
 def setup_org(profile_name: str, data: OrganizationCreate, db: Session = Depends(get_db), email: str = Depends(get_current_user_email)):
     return secure_profile_sync(db, email, "organization", Organization, data.model_dump(), profile_name)

@@ -1,12 +1,12 @@
 from fastapi import Depends, HTTPException, status
-from fastapi.security import APIKeyHeader # 👈 এটি ইম্পোর্ট করুন
+from fastapi.security import APIKeyHeader # 👈 Import it
 from jose import jwt, JWTError
 
 SECRET_KEY = "your_super_secret_key" 
 ALGORITHM = "HS256"
 
-# 🛡️ এটি সরাসরি টোকেন পেস্ট করার বক্স তৈরি করবে
-# 'name' ফিল্ডে 'Authorization' দেওয়ার মানে হলো এটি হেডার হিসেবে যাবে
+# 🛡️ This will directly generate the token pasting box
+# Putting 'Authorization' in the 'name' field means it will go as a header
 api_key_header = APIKeyHeader(name="Authorization", auto_error=False)
 
 def get_current_user_email(token: str = Depends(api_key_header)):
@@ -20,7 +20,7 @@ def get_current_user_email(token: str = Depends(api_key_header)):
         raise credentials_exception
 
     try:
-        # টোকেন যদি 'Bearer <token>' ফরম্যাটে থাকে তবে 'Bearer ' অংশটুকু বাদ দিতে হবে
+        # If the token is in the format 'Bearer <token>' then the 'Bearer' part must be omitted
         if token.startswith("Bearer "):
             token = token.split(" ")[1]
 

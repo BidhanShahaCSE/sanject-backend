@@ -29,4 +29,4 @@ class TeamResponse(TeamBase):
     updated_at: Optional[datetime] = None
 
     class Config:
-        from_attributes = True  # Pydantic v2 (orm_mode এর বদলে)
+        from_attributes = True  # Pydantic v2 (replaces orm_mode)
