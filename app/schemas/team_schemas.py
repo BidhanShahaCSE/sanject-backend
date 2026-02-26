@@ -18,11 +18,13 @@ class TeamCreate(TeamBase):
 class TeamUpdate(BaseModel):
     team_name: Optional[str] = None
     description: Optional[str] = None
+    members_email: Optional[List[str]] = None
 
 
 # 🔹 Response
 class TeamResponse(TeamBase):
     id: int
+    members_email: Optional[List[str]] = []
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

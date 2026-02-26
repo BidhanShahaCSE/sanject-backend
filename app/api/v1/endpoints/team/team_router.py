@@ -101,7 +101,21 @@ def create_team(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to create team: {str(e)}")
 
-    return new_team
+    member_emails = [owner.email] + [m.email for m in member_users if m.id != owner.id]
+    return {
+        "id": new_team.id,
+        "team_name": new_team.team_name,
+        "description": new_team.description,
+        "members_email": member_emails,
+        "created_at": db.execute(
+            text("SELECT created_at FROM teams WHERE id = :team_id"),
+            {"team_id": new_team.id},
+        ).scalar(),
+        "updated_at": db.execute(
+            text("SELECT updated_at FROM teams WHERE id = :team_id"),
+            {"team_id": new_team.id},
+        ).scalar(),
+    }
 
 
 # ✅ GET ALL TEAMS
@@ -111,12 +125,53 @@ def get_teams(
     current_user_email: str = Depends(get_current_user_email)
 ):
     _ensure_teams_owner_id_column(db)
-    result = db.execute(
-        text(
-            "SELECT id, team_name, description, created_at, updated_at FROM teams ORDER BY id DESC"
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    team_id_rows = db.query(TeamMember.team_id).filter(TeamMember.user_id == user.id).all()
+    my_team_ids = [row[0] for row in team_id_rows]
+    if not my_team_ids:
+        return []
+
+    teams_query = db.query(Team).filter(Team.id.in_(my_team_ids)).order_by(Team.id.desc()).all()
+
+    teams = []
+    for team in teams_query:
+        row = db.execute(
+            text("SELECT created_at, updated_at FROM teams WHERE id = :team_id"),
+            {"team_id": team.id},
+        ).mappings().first()
+        teams.append(
+            {
+                "id": team.id,
+                "team_name": team.team_name,
+                "description": team.description,
+                "created_at": row["created_at"] if row else None,
+                "updated_at": row["updated_at"] if row else None,
+            }
         )
-    )
-    return [dict(row) for row in result.mappings().all()]
+
+    user_rows = db.execute(text("SELECT id, email FROM users")).mappings().all()
+    user_email_by_id = {row["id"]: row["email"] for row in user_rows}
+
+    member_rows = db.execute(
+        text("SELECT team_id, user_id FROM team_members")
+    ).mappings().all()
+
+    members_by_team = {}
+    for row in member_rows:
+        team_id = row["team_id"]
+        user_id = row["user_id"]
+        email = user_email_by_id.get(user_id)
+        if not email:
+            continue
+        members_by_team.setdefault(team_id, []).append(email)
+
+    for item in teams:
+        item["members_email"] = members_by_team.get(item["id"], [])
+
+    return teams
 
 
 # ✅ UPDATE TEAM
@@ -133,10 +188,44 @@ def update_team(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
+    if team.owner_id is not None:
+        owner = db.query(User).filter(User.id == team.owner_id).first()
+        if owner and owner.email != current_user_email:
+            raise HTTPException(status_code=403, detail="Only team owner can edit team")
+
     update_data = team_data.model_dump(exclude_unset=True)
+    members_email = update_data.pop("members_email", None)
 
     for key, value in update_data.items():
         setattr(team, key, value)
+
+    if members_email is not None:
+        existing_users = db.query(User).filter(User.email.in_(members_email)).all()
+        existing_emails = {u.email for u in existing_users}
+        missing = [email for email in members_email if email not in existing_emails]
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"These members are not registered: {', '.join(missing)}",
+            )
+
+        owner_member = db.query(TeamMember).filter(
+            TeamMember.team_id == team.id,
+            TeamMember.user_id == team.owner_id,
+        ).first()
+        if not owner_member:
+            db.add(TeamMember(team_id=team.id, user_id=team.owner_id))
+            db.flush()
+
+        db.query(TeamMember).filter(
+            TeamMember.team_id == team.id,
+            TeamMember.user_id != team.owner_id,
+        ).delete(synchronize_session=False)
+
+        for user in existing_users:
+            if user.id == team.owner_id:
+                continue
+            db.add(TeamMember(team_id=team.id, user_id=user.id))
 
     db.commit()
     db.execute(
@@ -146,7 +235,27 @@ def update_team(
     db.commit()
     db.refresh(team)
 
-    return team
+    member_ids = db.query(TeamMember.user_id).filter(TeamMember.team_id == team.id).all()
+    member_ids = [row[0] for row in member_ids]
+    member_emails = []
+    if member_ids:
+        members = db.query(User.email).filter(User.id.in_(member_ids)).all()
+        member_emails = [row[0] for row in members]
+
+    return {
+        "id": team.id,
+        "team_name": team.team_name,
+        "description": team.description,
+        "members_email": member_emails,
+        "created_at": db.execute(
+            text("SELECT created_at FROM teams WHERE id = :team_id"),
+            {"team_id": team.id},
+        ).scalar(),
+        "updated_at": db.execute(
+            text("SELECT updated_at FROM teams WHERE id = :team_id"),
+            {"team_id": team.id},
+        ).scalar(),
+    }
 
 
 # ✅ DELETE TEAM
@@ -162,6 +271,12 @@ def delete_team(
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
+    if team.owner_id is not None:
+        owner = db.query(User).filter(User.id == team.owner_id).first()
+        if owner and owner.email != current_user_email:
+            raise HTTPException(status_code=403, detail="Only team owner can delete team")
+
+    db.query(TeamMember).filter(TeamMember.team_id == team_id).delete(synchronize_session=False)
     db.delete(team)
     db.commit()
 

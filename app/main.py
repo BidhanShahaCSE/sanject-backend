@@ -11,8 +11,10 @@ from app.api.v1.endpoints.assignment.assignment_router import router as assignme
 from app.api.v1.endpoints.log.profile_setup import router as profile_setup_router
 from app.api.v1.endpoints.project.sub_task_router import router as sub_task_router
 from app.api.v1.endpoints.team.team_router import router as team_router
+from app.api.v1.endpoints.sms.sms_router import router as sms_router
 from app.db.database import Base, engine
 from app.model.team_member_model import TeamMember
+from app.model.sms_message_model import SmsMessage
 app = FastAPI()
 
 
@@ -33,3 +35,4 @@ app.include_router(daily_task_router)
 app.include_router(assignment_router)
 app.include_router(profile_setup_router)
 app.include_router(team_router)
+app.include_router(sms_router)
