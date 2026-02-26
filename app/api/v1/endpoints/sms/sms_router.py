@@ -6,6 +6,7 @@ from typing import List
 
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email
 from app.db.database import get_db
+from app.model.direct_chat_room_model import DirectChatRoom
 from app.model.sms_message_model import SmsMessage
 from app.model.team_member_model import TeamMember
 from app.model.team_model import Team
@@ -13,6 +14,7 @@ from app.model.user_model import User
 from app.model.notification_model import Notification
 from app.schemas.sms_schemas import (
     DirectConversationOut,
+    DirectChatRoomOut,
     DirectSmsCreate,
     SmsMessageOut,
     TeamSmsCreate,
@@ -32,6 +34,14 @@ def _assert_user_exists(db: Session, email: str) -> None:
     user = db.query(User).filter(func.lower(User.email) == email.lower()).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"User not found: {email}")
+
+
+def _normalize_direct_pair(a: str, b: str) -> tuple[str, str]:
+    left = (a or "").strip().lower()
+    right = (b or "").strip().lower()
+    if left <= right:
+        return left, right
+    return right, left
 
 
 def _assert_team_member(db: Session, team_id: int, user_email: str) -> Team:
@@ -118,6 +128,57 @@ def send_direct_sms(
     db.commit()
     db.refresh(sms)
     return sms
+
+
+@router.post("/direct/ensure-room", response_model=DirectChatRoomOut, status_code=status.HTTP_200_OK)
+def ensure_direct_chat_room(
+    payload: DirectSmsCreate,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    recipient = payload.recipient_email.strip().lower()
+    if not recipient or "@" not in recipient:
+        raise HTTPException(status_code=400, detail="Valid recipient_email is required")
+
+    if recipient == current_user_email.strip().lower():
+        raise HTTPException(status_code=400, detail="You cannot start chat with yourself")
+
+    _assert_user_exists(db, recipient)
+    _assert_user_exists(db, current_user_email)
+
+    participant_one, participant_two = _normalize_direct_pair(current_user_email, recipient)
+
+    room = (
+        db.query(DirectChatRoom)
+        .filter(
+            DirectChatRoom.participant_one == participant_one,
+            DirectChatRoom.participant_two == participant_two,
+        )
+        .first()
+    )
+
+    if room:
+        return {
+            "id": room.id,
+            "recipient_email": recipient,
+            "created_at": room.created_at,
+            "existed": True,
+        }
+
+    room = DirectChatRoom(
+        participant_one=participant_one,
+        participant_two=participant_two,
+    )
+    db.add(room)
+    db.commit()
+    db.refresh(room)
+
+    return {
+        "id": room.id,
+        "recipient_email": recipient,
+        "created_at": room.created_at,
+        "existed": False,
+    }
 
 
 @router.get("/direct/{recipient_email}", response_model=List[SmsMessageOut])
