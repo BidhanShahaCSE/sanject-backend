@@ -189,6 +189,26 @@ def get_direct_conversations(
     return conversations
 
 
+@router.get("/message/{message_id}", response_model=SmsMessageOut)
+def get_message_by_id(
+    message_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    sms = db.query(SmsMessage).filter(SmsMessage.id == message_id).first()
+    if not sms:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    if sms.team_id is None:
+        participants = {sms.sender_email, sms.recipient_email}
+        if current_user_email not in participants:
+            raise HTTPException(status_code=403, detail="Not allowed")
+    else:
+        _assert_team_member(db, sms.team_id, current_user_email)
+
+    return sms
+
+
 @router.post("/team/{team_id}", response_model=SmsMessageOut, status_code=status.HTTP_201_CREATED)
 def send_team_sms(
     team_id: int,

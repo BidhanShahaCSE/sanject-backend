@@ -64,6 +64,21 @@ def get_personal_goals(
 ):
     return db.query(PersonalGoal).filter(PersonalGoal.owner_email == current_user_email).all()
 
+
+@router.get("/{goal_id}", response_model=PersonalGoalOut)
+def get_personal_goal_by_id(
+    goal_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    goal = db.query(PersonalGoal).filter(
+        PersonalGoal.id == goal_id,
+        PersonalGoal.owner_email == current_user_email,
+    ).first()
+    if not goal:
+        raise HTTPException(status_code=404, detail="Goal not found or unauthorized")
+    return goal
+
 # 🚀 ৩. গোল আপডেট করা (মালিকানা যাচাই Access Token দিয়ে)
 @router.patch("/{goal_id}", response_model=PersonalGoalOut)
 def update_personal_goal(

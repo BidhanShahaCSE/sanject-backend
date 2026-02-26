@@ -174,6 +174,52 @@ def get_teams(
     return teams
 
 
+@router.get("/{team_id}", response_model=TeamResponse)
+def get_team_by_id(
+    team_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    _ensure_teams_owner_id_column(db)
+
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    member_row = db.query(TeamMember).filter(
+        TeamMember.team_id == team_id,
+        TeamMember.user_id == user.id,
+    ).first()
+    if not member_row:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    team = db.query(Team).filter(Team.id == team_id).first()
+    if not team:
+        raise HTTPException(status_code=404, detail="Team not found")
+
+    member_ids = db.query(TeamMember.user_id).filter(TeamMember.team_id == team_id).all()
+    member_ids = [row[0] for row in member_ids]
+    member_emails = []
+    if member_ids:
+        members = db.query(User.email).filter(User.id.in_(member_ids)).all()
+        member_emails = [row[0] for row in members]
+
+    return {
+        "id": team.id,
+        "team_name": team.team_name,
+        "description": team.description,
+        "members_email": member_emails,
+        "created_at": db.execute(
+            text("SELECT created_at FROM teams WHERE id = :team_id"),
+            {"team_id": team.id},
+        ).scalar(),
+        "updated_at": db.execute(
+            text("SELECT updated_at FROM teams WHERE id = :team_id"),
+            {"team_id": team.id},
+        ).scalar(),
+    }
+
+
 # ✅ UPDATE TEAM
 @router.patch("/{team_id}", response_model=TeamResponse)
 def update_team(
