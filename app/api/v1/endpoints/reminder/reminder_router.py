@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 from typing import List
+from datetime import datetime
 from app.db.database import get_db
 from app.model.reminder_model import Reminder
 from app.model.user_model import User  # 🚀 To get User ID
@@ -15,6 +17,25 @@ router = APIRouter(
     tags=["Reminders"]
 )
 
+
+def _cleanup_expired_reminders(db: Session, owner_email: str) -> None:
+    now = datetime.now()
+    today = now.date()
+    current_time = now.time()
+
+    db.query(Reminder).filter(
+        Reminder.owner_email == owner_email,
+        or_(
+            Reminder.reminder_date < today,
+            and_(
+                Reminder.reminder_date == today,
+                Reminder.reminder_time <= current_time,
+            ),
+        ),
+    ).delete(synchronize_session=False)
+
+    db.commit()
+
 # 🚀 1. Creating new reminders (and sending notifications to owners)
 @router.post("/", response_model=ReminderResponse, status_code=status.HTTP_201_CREATED)
 def create_reminder(
@@ -22,6 +43,8 @@ def create_reminder(
     db: Session = Depends(get_db),
     current_email: str = Depends(get_current_user_email) # 🔒 Access Token check
 ):
+    _cleanup_expired_reminders(db, current_email)
+
     # Finding user id with token email
     user = db.query(User).filter(User.email == current_email).first()
     if not user:
@@ -62,6 +85,7 @@ def get_all_reminders(
     db: Session = Depends(get_db),
     current_email: str = Depends(get_current_user_email) # 🔒 Access Token check
 ):
+    _cleanup_expired_reminders(db, current_email)
     return db.query(Reminder).filter(Reminder.owner_email == current_email).all()
 
 # 3. Deleting Reminders (Verifying Ownership with Access Token)
