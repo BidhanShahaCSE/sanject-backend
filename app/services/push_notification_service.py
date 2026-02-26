@@ -4,7 +4,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, messaging
 from firebase_admin.exceptions import FirebaseError
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.model.device_token_model import DeviceToken
@@ -75,10 +75,4 @@ def send_push_for_notification(connection, user_id: int, title: str, message: st
     try:
         messaging.send(firebase_message)
     except FirebaseError:
-        try:
-            connection.execute(
-                delete(DeviceToken)
-                .where(DeviceToken.user_id == user_id)
-            )
-        except SQLAlchemyError:
-            pass
+        pass
