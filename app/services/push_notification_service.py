@@ -57,6 +57,13 @@ def send_push_for_notification(connection, user_id: int, title: str, message: st
     firebase_message = messaging.Message(
         token=token,
         notification=notification,
+        android=messaging.AndroidConfig(
+            priority="high",
+            notification=messaging.AndroidNotification(
+                channel_id="in_app_popup_channel_v2",
+                sound="default",
+            ),
+        ),
         data={
             "type": "app_notification",
             "user_id": str(user_id),
