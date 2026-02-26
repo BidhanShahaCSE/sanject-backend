@@ -36,7 +36,7 @@ def save_device_token(
         db.commit()
     except SQLAlchemyError:
         db.rollback()
-        return {"message": "Device token skipped. Table not ready."}
+        raise HTTPException(status_code=500, detail="Failed to save device token")
 
     return {"message": "Device token saved successfully."}
 

@@ -13,6 +13,9 @@ from app.api.v1.endpoints.project.sub_task_router import router as sub_task_rout
 from app.api.v1.endpoints.team.team_router import router as team_router
 from app.api.v1.endpoints.sms.sms_router import router as sms_router
 from app.db.database import Base, engine
+from app.model.device_token_model import DeviceToken
+from app.model.notification_model import Notification
+from app.model.user_model import User
 from app.model.team_member_model import TeamMember
 from app.model.sms_message_model import SmsMessage
 app = FastAPI()
