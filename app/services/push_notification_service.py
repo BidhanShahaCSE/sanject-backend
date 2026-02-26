@@ -67,6 +67,8 @@ def send_push_for_notification(connection, user_id: int, title: str, message: st
         data={
             "type": "app_notification",
             "user_id": str(user_id),
+            "title": title,
+            "body": message,
         },
     )
 

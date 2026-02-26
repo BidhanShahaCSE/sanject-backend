@@ -28,9 +28,15 @@ def save_device_token(
         raise HTTPException(status_code=404, detail="User not found")
 
     try:
-        existing = db.query(DeviceToken).filter(DeviceToken.user_id == user.id).first()
-        if existing:
-            existing.fcm_token = payload.fcm_token
+        existing_for_user = db.query(DeviceToken).filter(DeviceToken.user_id == user.id).first()
+        existing_for_token = db.query(DeviceToken).filter(DeviceToken.fcm_token == payload.fcm_token).first()
+
+        if existing_for_token and existing_for_token.user_id != user.id:
+            if existing_for_user and existing_for_user.id != existing_for_token.id:
+                db.delete(existing_for_user)
+            existing_for_token.user_id = user.id
+        elif existing_for_user:
+            existing_for_user.fcm_token = payload.fcm_token
         else:
             db.add(DeviceToken(user_id=user.id, fcm_token=payload.fcm_token))
         db.commit()
