@@ -41,6 +41,16 @@ class LoginResponse(BaseModel):
     role: str
 
 
+class TokenRefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class TokenRefreshResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
 class MeResponse(BaseModel):
     user_id: int
     email: EmailStr
@@ -64,6 +74,11 @@ def create_tokens(email: str):
     refresh_token = jwt.encode({"sub": email, "exp": refresh_expire}, SECRET_KEY, algorithm=ALGORITHM)
     
     return access_token, refresh_token
+
+
+def create_access_token_only(email: str):
+    access_expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode({"sub": email, "exp": access_expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 # -------------------------
 # Login Route (আপনার নিয়ম অনুযায়ী JSON বডি ব্যবহার করে)
@@ -99,6 +114,33 @@ def login_user(data: LoginRequest, db: Session = Depends(get_db)):
         "token_type": "bearer",
         "user_id": user.id,
         "role": user.role
+    }
+
+
+@router.post("/refresh", response_model=TokenRefreshResponse)
+def refresh_access_token(data: TokenRefreshRequest, db: Session = Depends(get_db)):
+    incoming_refresh_token = (data.refresh_token or "").strip()
+    if not incoming_refresh_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    try:
+        payload = jwt.decode(incoming_refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: Optional[str] = payload.get("sub")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    if not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not user.refresh_token or user.refresh_token != incoming_refresh_token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired. Please login again")
+
+    new_access_token = create_access_token_only(user.email)
+    return {
+        "access_token": new_access_token,
+        "refresh_token": incoming_refresh_token,
+        "token_type": "bearer",
     }
 
 # -------------------------
