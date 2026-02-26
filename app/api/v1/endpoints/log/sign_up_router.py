@@ -26,6 +26,12 @@ class SignUpRequest(BaseModel):
     email: EmailStr
     password: str
     role: str  # "student", "manager", "employee", "teacher"
+    department: str | None = None
+    roll: str | None = None
+    semester: str | None = None
+    batch: str | None = None
+    org_id: str | None = None
+    org_name: str | None = None
 
 
 class SignUpResponse(BaseModel):
@@ -73,7 +79,33 @@ def signup_user(data: SignUpRequest, db: Session = Depends(get_db)):
 
     try:
         if data.role == "student":
-            new_profile = Student(user_id=new_user.id)
+            student_required_fields = {
+                "department": (data.department or "").strip(),
+                "roll": (data.roll or "").strip(),
+                "semester": (data.semester or "").strip(),
+                "batch": (data.batch or "").strip(),
+                "org_id": (data.org_id or "").strip(),
+                "org_name": (data.org_name or "").strip(),
+            }
+
+            missing_fields = [k for k, v in student_required_fields.items() if not v]
+            if missing_fields:
+                db.delete(new_user)
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Student profile fields required: {', '.join(missing_fields)}",
+                )
+
+            new_profile = Student(
+                user_id=new_user.id,
+                department=student_required_fields["department"],
+                roll=student_required_fields["roll"],
+                semester=student_required_fields["semester"],
+                batch=student_required_fields["batch"],
+                org_id=student_required_fields["org_id"],
+                org_name=student_required_fields["org_name"],
+            )
             db.add(new_profile)
 
         elif data.role == "teacher":
