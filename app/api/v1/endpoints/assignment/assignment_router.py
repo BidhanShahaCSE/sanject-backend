@@ -107,6 +107,24 @@ def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Assignment not found")
     return assignment
 
+
+@router.get("/{assignment_id}/subtasks", response_model=List[AssignmentSubTaskOut])
+def get_subtasks_by_assignment(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+):
+    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    subtasks = (
+        db.query(AssignmentSubTask)
+        .filter(AssignmentSubTask.assignment_id == assignment_id)
+        .order_by(AssignmentSubTask.created_at.desc())
+        .all()
+    )
+    return subtasks
+
 # অ্যাসাইনমেন্ট ডিলিট করা
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_assignment(

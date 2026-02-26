@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -28,7 +29,7 @@ def _display_name_from_email(email: str) -> str:
 
 
 def _assert_user_exists(db: Session, email: str) -> None:
-    user = db.query(User).filter(User.email == email).first()
+    user = db.query(User).filter(func.lower(User.email) == email.lower()).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"User not found: {email}")
 
@@ -38,7 +39,7 @@ def _assert_team_member(db: Session, team_id: int, user_email: str) -> Team:
     if not team:
         raise HTTPException(status_code=404, detail="Team not found")
 
-    user = db.query(User).filter(User.email == user_email).first()
+    user = db.query(User).filter(func.lower(User.email) == user_email.lower()).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -68,8 +69,16 @@ def send_direct_sms(
 
     _assert_user_exists(db, recipient)
 
-    sender_user = db.query(User).filter(User.email == current_user_email).first()
-    recipient_user = db.query(User).filter(User.email == recipient).first()
+    sender_user = (
+        db.query(User)
+        .filter(func.lower(User.email) == current_user_email.lower())
+        .first()
+    )
+    recipient_user = (
+        db.query(User)
+        .filter(func.lower(User.email) == recipient.lower())
+        .first()
+    )
 
     sms = SmsMessage(
         sender_email=current_user_email,
@@ -200,7 +209,11 @@ def send_team_sms(
     db.add(sms)
     db.flush()
 
-    sender_user = db.query(User).filter(User.email == current_user_email).first()
+    sender_user = (
+        db.query(User)
+        .filter(func.lower(User.email) == current_user_email.lower())
+        .first()
+    )
     sender_name = _display_name_from_email(current_user_email)
 
     members = (
