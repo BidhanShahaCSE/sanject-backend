@@ -20,6 +20,7 @@ from app.model.team_model import Team
 from app.model.team_member_model import TeamMember
 from app.model.user_model import User
 from app.model.sms_message_model import SmsMessage
+from app.model.direct_chat_room_model import DirectChatRoom
 
 Base.metadata.create_all(bind=engine)
 print("Tables created successfully!")

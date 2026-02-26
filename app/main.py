@@ -18,6 +18,7 @@ from app.model.notification_model import Notification
 from app.model.user_model import User
 from app.model.team_member_model import TeamMember
 from app.model.sms_message_model import SmsMessage
+from app.model.direct_chat_room_model import DirectChatRoom
 app = FastAPI()
 
 
