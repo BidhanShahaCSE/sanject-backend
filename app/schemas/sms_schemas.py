@@ -30,3 +30,10 @@ class DirectConversationOut(BaseModel):
     recipient_email: str
     last_message: str
     created_at: datetime
+
+
+class DirectChatRoomOut(BaseModel):
+    id: int
+    recipient_email: str
+    created_at: datetime
+    existed: bool
