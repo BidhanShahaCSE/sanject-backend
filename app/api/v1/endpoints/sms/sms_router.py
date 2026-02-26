@@ -15,6 +15,7 @@ from app.model.notification_model import Notification
 from app.schemas.sms_schemas import (
     DirectConversationOut,
     DirectChatRoomOut,
+    DirectChatRoomEnsureCreate,
     DirectSmsCreate,
     SmsMessageOut,
     TeamSmsCreate,
@@ -132,7 +133,7 @@ def send_direct_sms(
 
 @router.post("/direct/ensure-room", response_model=DirectChatRoomOut, status_code=status.HTTP_200_OK)
 def ensure_direct_chat_room(
-    payload: DirectSmsCreate,
+    payload: DirectChatRoomEnsureCreate,
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email),
 ):

@@ -9,6 +9,10 @@ class DirectSmsCreate(BaseModel):
     message: str
 
 
+class DirectChatRoomEnsureCreate(BaseModel):
+    recipient_email: str
+
+
 class TeamSmsCreate(BaseModel):
     message: str
 
