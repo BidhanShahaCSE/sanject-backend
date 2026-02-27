@@ -8,8 +8,6 @@ from app.db.database import get_db
 from app.model.project_model import Project
 from app.model.project_member_model import ProjectMember
 from app.model.subtask_model import SubTask # Your new model
-from app.model.user_model import User 
-from app.model.notification_model import Notification 
 
 # 🛡️ Token theke email pawar dependency
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
@@ -58,26 +56,7 @@ async def upload_subtask(
         db.add(new_subtask)
         db.commit()
         db.refresh(new_subtask)
-
-        # 2. Notification: will only go to members of that project
-        project = db.query(Project).filter(Project.id == project_id).first()
-        all_members = db.query(ProjectMember).filter(ProjectMember.project_id == project_id).all()
-        
-        for m in all_members:
-            if m.email != current_user_email: # Do not send to yourself
-                target_user = db.query(User).filter(User.email == m.email).first()
-                if target_user:
-                    db.add(Notification(
-                        user_id=target_user.id,
-                        title="SubTask Uploaded",
-                        message=f"New subtask '{title}' uploaded in project '{project.project_name}'",
-                        type="subtask",
-                        reference_id=new_subtask.id,
-                        is_read=False
-                    ))
-        
-        db.commit()
-        return {"message": "Subtask uploaded and members notified.", "subtask_id": new_subtask.id}
+        return {"message": "Subtask uploaded successfully.", "subtask_id": new_subtask.id}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

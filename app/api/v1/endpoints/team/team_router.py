@@ -8,7 +8,6 @@ from app.db.database import get_db
 from app.model.team_model import Team
 from app.model.user_model import User
 from app.model.team_member_model import TeamMember
-from app.model.notification_model import Notification
 from app.schemas.team_schemas import TeamCreate, TeamResponse, TeamUpdate
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email
 
@@ -93,31 +92,6 @@ def create_team(
         for member in member_users:
             if member.id != owner.id:
                 db.add(TeamMember(team_id=new_team.id, user_id=member.id))
-
-        db.add(
-            Notification(
-                user_id=owner.id,
-                title="Team Created",
-                message=f"You created team '{new_team.team_name}'",
-                type="team",
-                reference_id=new_team.id,
-                is_read=False,
-            )
-        )
-
-        for member in member_users:
-            if member.id == owner.id:
-                continue
-            db.add(
-                Notification(
-                    user_id=member.id,
-                    title="Added to Team",
-                    message=f"You were added to team '{new_team.team_name}' by {owner.email}",
-                    type="team",
-                    reference_id=new_team.id,
-                    is_read=False,
-                )
-            )
 
         db.commit()
     except IntegrityError:

@@ -125,18 +125,6 @@ def send_direct_sms(
     sender_name = _display_name_from_email(current_user_email)
     recipient_name = _display_name_from_email(recipient)
 
-    if sender_user:
-        db.add(
-            Notification(
-                user_id=sender_user.id,
-                title="Message Sent",
-                message=f"You messaged to {recipient_name}",
-                type="sms",
-                reference_id=sms.id,
-                is_read=False,
-            )
-        )
-
     if recipient_user:
         db.add(
             Notification(
@@ -326,18 +314,6 @@ def send_team_sms(
         .filter(TeamMember.team_id == team_id)
         .all()
     )
-
-    if sender_user:
-        db.add(
-            Notification(
-                user_id=sender_user.id,
-                title="Team Message Sent",
-                message=f"You messaged to team '{team.team_name}'",
-                type="sms",
-                reference_id=team_id,
-                is_read=False,
-            )
-        )
 
     for member in members:
         if sender_user and member.user_id == sender_user.id:

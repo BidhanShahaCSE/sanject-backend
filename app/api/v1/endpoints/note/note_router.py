@@ -5,7 +5,6 @@ from typing import List
 from app.db.database import get_db
 from app.model.note_model import Note 
 from app.model.user_model import User
-from app.model.notification_model import Notification
 from app.model.assignment_subtask_note_link_model import AssignmentSubtaskNoteLink
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
@@ -59,18 +58,6 @@ def create_note(
         db.add(new_note)
         db.commit()
         db.refresh(new_note)
-
-        db.add(
-            Notification(
-                user_id=owner.id,
-                title="Note Created",
-                message=f"You created note '{new_note.name}'",
-                type="note",
-                reference_id=new_note.id,
-                is_read=False,
-            )
-        )
-        db.commit()
         return new_note
     except Exception as e:
         db.rollback()

@@ -5,7 +5,6 @@ from app.db.database import get_db
 from app.model.project_member_model import ProjectMember
 from app.model.project_model import Project
 from app.model.user_model import User 
-from app.model.notification_model import Notification 
 from app.schemas.project_member_schemas import ProjectMembersUpdateList
 from app.schemas.project_schemas import ProjectCreate, ProjectResponse, ProjectUpdate
 
@@ -28,7 +27,6 @@ def create_project(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    member_users = []
     for email in project_data.members_email:
         reg_user = db.query(User).filter(User.email == email).first()
         if not reg_user:
@@ -36,7 +34,6 @@ def create_project(
                 status_code=status.HTTP_400_BAD_REQUEST, 
                 detail=f"Member email '{email}' is not a registered user."
             )
-        member_users.append(reg_user)
 
     members_str = ",".join(project_data.members_email)
 
@@ -66,29 +63,6 @@ def create_project(
                 deadline=new_project.deadline
             )
             db.add(new_member_entry)
-        
-        # 2. Sending notifications to members
-        for member in member_users:
-            new_notification = Notification(
-                user_id=member.id,
-                title="New Project Assigned",
-                message=f"You have been added to '{new_project.project_name}' by {user.email}",
-                type="project",
-                reference_id=new_project.id,
-                is_read=False
-            )
-            db.add(new_notification)
-
-        # 3. Sending notifications to owner 🚀
-        owner_notification = Notification(
-            user_id=user.id,
-            title="Project Created Successfully",
-            message=f"You have created the project: '{new_project.project_name}'",
-            type="project",
-            reference_id=new_project.id,
-            is_read=False
-        )
-        db.add(owner_notification)
 
         db.commit() 
         return new_project
