@@ -23,6 +23,7 @@ from app.model.team_member_model import TeamMember
 from app.model.sms_message_model import SmsMessage
 from app.model.direct_chat_room_model import DirectChatRoom
 from app.model.gemini_model import GeminiChat # নতুন মডেল
+from app.model.assignment_subtask_note_link_model import AssignmentSubtaskNoteLink
 
 app = FastAPI()
 

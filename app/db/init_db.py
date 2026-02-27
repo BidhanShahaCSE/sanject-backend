@@ -1,6 +1,7 @@
 from app.db.database import Base, engine
 from app.model.assignment_model import Assignment
 from app.model.assignment_subtask_model import AssignmentSubTask
+from app.model.assignment_subtask_note_link_model import AssignmentSubtaskNoteLink
 from app.model.daily_task_model import DailyTask
 from app.model.device_token_model import DeviceToken
 from app.model.employee_model import Employee

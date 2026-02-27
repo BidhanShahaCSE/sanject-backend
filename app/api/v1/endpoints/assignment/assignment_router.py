@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
+from pydantic import BaseModel, EmailStr
 
 from app.db.database import get_db
 from app.model.assignment_model import Assignment
@@ -10,6 +11,8 @@ from app.model.user_model import User
 from app.model.project_model import Project 
 from app.model.project_member_model import ProjectMember 
 from app.model.notification_model import Notification
+from app.model.note_model import Note
+from app.model.assignment_subtask_note_link_model import AssignmentSubtaskNoteLink
 
 # Schemas
 from app.schemas.assignment_schemas import AssignmentCreate, AssignmentOut, AssignmentUpdate
@@ -27,6 +30,11 @@ router = APIRouter(
 )
 
 ALLOWED_TASK_TYPES = ["Assignment", "Lab Report", "Exam", "Home Work"]
+
+
+class ShareProjectLinkRequest(BaseModel):
+    drive_link: str
+    recipient_email: EmailStr
 
 # ----------------------------------------------------------------
 # 🚀 1. Main Assignment Section
@@ -294,3 +302,124 @@ def report_subtask_issue(
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/subtasks/{subtask_id}/note")
+def ensure_subtask_note(
+    subtask_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    subtask = db.query(AssignmentSubTask).filter(AssignmentSubTask.id == subtask_id).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+
+    link = (
+        db.query(AssignmentSubtaskNoteLink)
+        .filter(
+            AssignmentSubtaskNoteLink.subtask_id == subtask_id,
+            AssignmentSubtaskNoteLink.owner_email == current_user_email,
+        )
+        .first()
+    )
+
+    if link:
+        existing_note = (
+            db.query(Note)
+            .filter(Note.id == link.note_id, Note.owner_email == current_user_email)
+            .first()
+        )
+        if existing_note:
+            return existing_note
+
+    note = Note(
+        name=f"Subtask Note: {subtask.name}",
+        description=f"Linked to subtask '{subtask.name}'",
+        owner_email=current_user_email,
+    )
+
+    try:
+        db.add(note)
+        db.flush()
+
+        db.add(
+            AssignmentSubtaskNoteLink(
+                subtask_id=subtask_id,
+                note_id=note.id,
+                owner_email=current_user_email,
+            )
+        )
+        db.commit()
+        db.refresh(note)
+        return note
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create subtask note: {str(e)}")
+
+
+@router.get("/subtasks/{subtask_id}/note")
+def get_subtask_note(
+    subtask_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    link = (
+        db.query(AssignmentSubtaskNoteLink)
+        .filter(
+            AssignmentSubtaskNoteLink.subtask_id == subtask_id,
+            AssignmentSubtaskNoteLink.owner_email == current_user_email,
+        )
+        .first()
+    )
+    if not link:
+        raise HTTPException(status_code=404, detail="No note found for this subtask")
+
+    note = (
+        db.query(Note)
+        .filter(Note.id == link.note_id, Note.owner_email == current_user_email)
+        .first()
+    )
+    if not note:
+        raise HTTPException(status_code=404, detail="Linked note not found")
+    return note
+
+
+@router.post("/subtasks/{subtask_id}/share-project")
+def share_subtask_project_link(
+    subtask_id: int,
+    data: ShareProjectLinkRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    link = data.drive_link.strip()
+    if not link:
+        raise HTTPException(status_code=400, detail="Drive link is required")
+
+    subtask = db.query(AssignmentSubTask).filter(AssignmentSubTask.id == subtask_id).first()
+    if not subtask:
+        raise HTTPException(status_code=404, detail="Subtask not found")
+
+    sender = db.query(User).filter(User.email == current_user_email).first()
+    if not sender:
+        raise HTTPException(status_code=404, detail="Sender not found")
+
+    receiver = db.query(User).filter(User.email == data.recipient_email).first()
+    if not receiver:
+        raise HTTPException(status_code=404, detail="Recipient email is not registered")
+
+    try:
+        db.add(
+            Notification(
+                user_id=receiver.id,
+                title=f"Project link from {sender.email}",
+                message=f"{sender.email} shared a drive link: {link}",
+                type="project_share",
+                reference_id=subtask.id,
+                is_read=False,
+            )
+        )
+        db.commit()
+        return {"message": "Project link sent successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to send link: {str(e)}")
