@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 from datetime import datetime
 from pydantic import BaseModel, EmailStr
@@ -397,6 +398,7 @@ def ensure_subtask_note(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email),
 ):
+    normalized_email = (current_user_email or "").strip().lower()
     subtask = db.query(AssignmentSubTask).filter(AssignmentSubTask.id == subtask_id).first()
     if not subtask:
         raise HTTPException(status_code=404, detail="Subtask not found")
@@ -405,7 +407,7 @@ def ensure_subtask_note(
         db.query(AssignmentSubtaskNoteLink)
         .filter(
             AssignmentSubtaskNoteLink.subtask_id == subtask_id,
-            AssignmentSubtaskNoteLink.owner_email == current_user_email,
+            func.lower(AssignmentSubtaskNoteLink.owner_email) == normalized_email,
         )
         .first()
     )
@@ -413,7 +415,10 @@ def ensure_subtask_note(
     if link:
         existing_note = (
             db.query(Note)
-            .filter(Note.id == link.note_id, Note.owner_email == current_user_email)
+            .filter(
+                Note.id == link.note_id,
+                func.lower(Note.owner_email) == normalized_email,
+            )
             .first()
         )
         if existing_note:
@@ -422,7 +427,7 @@ def ensure_subtask_note(
     note = Note(
         name=f"Subtask Note: {subtask.name}",
         description=f"Linked to subtask '{subtask.name}'",
-        owner_email=current_user_email,
+        owner_email=normalized_email,
     )
 
     try:
@@ -433,7 +438,7 @@ def ensure_subtask_note(
             AssignmentSubtaskNoteLink(
                 subtask_id=subtask_id,
                 note_id=note.id,
-                owner_email=current_user_email,
+                owner_email=normalized_email,
             )
         )
         db.commit()
@@ -450,11 +455,12 @@ def get_subtask_note(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email),
 ):
+    normalized_email = (current_user_email or "").strip().lower()
     link = (
         db.query(AssignmentSubtaskNoteLink)
         .filter(
             AssignmentSubtaskNoteLink.subtask_id == subtask_id,
-            AssignmentSubtaskNoteLink.owner_email == current_user_email,
+            func.lower(AssignmentSubtaskNoteLink.owner_email) == normalized_email,
         )
         .first()
     )
@@ -463,7 +469,7 @@ def get_subtask_note(
 
     note = (
         db.query(Note)
-        .filter(Note.id == link.note_id, Note.owner_email == current_user_email)
+        .filter(Note.id == link.note_id, func.lower(Note.owner_email) == normalized_email)
         .first()
     )
     if not note:

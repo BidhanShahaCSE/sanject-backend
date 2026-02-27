@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 from app.db.database import get_db
 from app.model.note_model import Note 
@@ -44,14 +45,15 @@ def create_note(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
-    owner = db.query(User).filter(User.email == current_user_email).first()
+    normalized_email = (current_user_email or "").strip().lower()
+    owner = db.query(User).filter(func.lower(User.email) == normalized_email).first()
     if not owner:
         raise HTTPException(status_code=404, detail="User not found")
 
     new_note = Note(
         name=note_data.name,
         description=note_data.description,
-        owner_email=current_user_email
+        owner_email=normalized_email
     )
     try:
         db.add(new_note)
@@ -83,9 +85,10 @@ def write_note_content(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    normalized_email = (current_user_email or "").strip().lower()
     db_note = db.query(Note).filter(
         Note.id == note_id, 
-        Note.owner_email == current_user_email
+        func.lower(Note.owner_email) == normalized_email
     ).first()
     
     if not db_note:
@@ -104,7 +107,11 @@ def update_note_content(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
-    db_note = db.query(Note).filter(Note.id == note_id, Note.owner_email == current_user_email).first()
+    normalized_email = (current_user_email or "").strip().lower()
+    db_note = db.query(Note).filter(
+        Note.id == note_id,
+        func.lower(Note.owner_email) == normalized_email,
+    ).first()
     if not db_note:
         raise HTTPException(status_code=404, detail="Note not found")
     
@@ -118,14 +125,15 @@ def get_user_notes(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    normalized_email = (current_user_email or "").strip().lower()
     linked_note_ids = [
         row[0]
         for row in db.query(AssignmentSubtaskNoteLink.note_id)
-        .filter(AssignmentSubtaskNoteLink.owner_email == current_user_email)
+        .filter(func.lower(AssignmentSubtaskNoteLink.owner_email) == normalized_email)
         .all()
     ]
 
-    query = db.query(Note).filter(Note.owner_email == current_user_email)
+    query = db.query(Note).filter(func.lower(Note.owner_email) == normalized_email)
     if linked_note_ids:
         query = query.filter(~Note.id.in_(linked_note_ids))
 
@@ -139,9 +147,10 @@ def delete_note(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    normalized_email = (current_user_email or "").strip().lower()
     note = db.query(Note).filter(
         Note.id == note_id, 
-        Note.owner_email == current_user_email
+        func.lower(Note.owner_email) == normalized_email
     ).first()
 
     if not note:
@@ -166,9 +175,10 @@ def get_note_details(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    normalized_email = (current_user_email or "").strip().lower()
     note = db.query(Note).filter(
         Note.id == note_id,
-        Note.owner_email == current_user_email
+        func.lower(Note.owner_email) == normalized_email
     ).first()
 
     if not note:
