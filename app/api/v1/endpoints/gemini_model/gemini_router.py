@@ -29,32 +29,7 @@ def _extract_model_name(model_obj) -> str:
 
 def _resolve_initial_model_name() -> str:
     preferred = (os.getenv("GEMINI_MODEL") or "").strip()
-    candidates = [
-        preferred,
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro-latest",
-        "gemini-pro",
-    ]
-
-    available = set()
-    try:
-        for listed_model in genai.list_models():
-            methods = getattr(listed_model, "supported_generation_methods", []) or []
-            if "generateContent" in methods:
-                available.add(_extract_model_name(listed_model))
-    except Exception:
-        # list_models() fail করলে নিচের fallback list দিয়ে try করা হবে
-        pass
-
-    for name in candidates:
-        if not name:
-            continue
-        if not available or name in available:
-            return name
-
-    return "gemini-pro"
+    return preferred or "gemini-2.5-flash"
 
 
 _model_name = _resolve_initial_model_name()
@@ -63,37 +38,22 @@ model = genai.GenerativeModel(_model_name)
 
 def _generate_ai_response(prompt: str) -> str:
     global model, _model_name
+    target_model = _resolve_initial_model_name()
+    try:
+        if _model_name != target_model:
+            model = genai.GenerativeModel(target_model)
+            _model_name = target_model
 
-    retry_candidates = [
-        _model_name,
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro-latest",
-        "gemini-pro",
-    ]
-
-    tried = set()
-    last_error = None
-
-    for candidate in retry_candidates:
-        if not candidate or candidate in tried:
-            continue
-        tried.add(candidate)
-
-        try:
-            active_model = genai.GenerativeModel(candidate)
-            response = active_model.generate_content(prompt)
-            model = active_model
-            _model_name = candidate
-            return getattr(response, "text", "") or ""
-        except Exception as error:
-            last_error = error
-
-    raise HTTPException(
-        status_code=502,
-        detail=f"AI model unavailable. Tried: {', '.join(tried)}. Last error: {last_error}",
-    )
+        response = model.generate_content(prompt)
+        return getattr(response, "text", "") or ""
+    except Exception as error:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"AI model unavailable for '{target_model}'. "
+                f"Set GEMINI_MODEL in environment if needed. Error: {error}"
+            ),
+        )
 
 # --- ১. Schemas (ডেটা আদান-প্রদানের ফরম্যাট) ---
 
@@ -121,6 +81,8 @@ def create_chat(request: ChatRequest, db: Session = Depends(get_db)):
         db.commit()
         db.refresh(new_chat)
         return new_chat
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
@@ -153,6 +115,8 @@ def edit_chat(chat_id: int, request: EditRequest, db: Session = Depends(get_db))
         db.commit()
         db.refresh(chat)
         return chat
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Update Error: {str(e)}")
 
