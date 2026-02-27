@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr
 from datetime import datetime, timedelta
@@ -8,6 +9,11 @@ from typing import Optional
 
 from app.db.database import get_db
 from app.model.user_model import User
+from app.model.student_models import Student
+from app.model.teacher_models import Teacher
+from app.model.manager_model import Manager
+from app.model.employee_model import Employee
+from app.model.organization_model import Organization
 # 🛡️ Import your created utilities for token verification
 from app.api.v1.endpoints.auth.auth_utils import get_current_user_email 
 
@@ -55,11 +61,76 @@ class MeResponse(BaseModel):
     user_id: int
     email: EmailStr
     role: str
+    name: Optional[str] = None
+    profile_data: dict = {}
 
 
 class MeUpdateRequest(BaseModel):
-    email: Optional[EmailStr] = None
+    name: Optional[str] = None
     new_password: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
+    joining_year: Optional[int] = None
+    roll: Optional[str] = None
+    semester: Optional[str] = None
+    batch: Optional[str] = None
+    org_id: Optional[str] = None
+    org_name: Optional[str] = None
+    employee_id: Optional[str] = None
+
+
+ROLE_MODEL_MAP = {
+    "student": Student,
+    "teacher": Teacher,
+    "manager": Manager,
+    "employee": Employee,
+    "organization": Organization,
+}
+
+ROLE_FIELDS_MAP = {
+    "student": ["department", "roll", "semester", "batch", "org_id", "org_name"],
+    "teacher": ["department", "designation", "joining_year", "org_id", "org_name"],
+    "manager": ["department", "designation", "joining_year", "org_id", "org_name"],
+    "employee": ["employee_id", "joining_year", "org_id", "org_name"],
+    "organization": ["org_id", "org_name"],
+}
+
+
+def _ensure_users_name_column(db: Session) -> None:
+    user_columns = {col["name"] for col in inspect(db.bind).get_columns("users")}
+    if "name" not in user_columns:
+        db.execute(text("ALTER TABLE users ADD COLUMN name VARCHAR"))
+        db.commit()
+
+
+def _get_user_name(db: Session, user_id: int) -> Optional[str]:
+    row = db.execute(
+        text("SELECT name FROM users WHERE id = :user_id"),
+        {"user_id": user_id},
+    ).fetchone()
+    return row[0] if row else None
+
+
+def _set_user_name(db: Session, user_id: int, name: str) -> None:
+    db.execute(
+        text("UPDATE users SET name = :name WHERE id = :user_id"),
+        {"name": name, "user_id": user_id},
+    )
+
+
+def _serialize_profile_data(db: Session, user: User) -> dict:
+    role_key = (user.role or "").lower()
+    model = ROLE_MODEL_MAP.get(role_key)
+    fields = ROLE_FIELDS_MAP.get(role_key, [])
+
+    if not model:
+        return {}
+
+    profile = db.query(model).filter(model.user_id == user.id).first()
+    if not profile:
+        return {}
+
+    return {field: getattr(profile, field, None) for field in fields}
 
 # -------------------------
 # Helper Functions for Token
@@ -166,6 +237,8 @@ def get_my_profile(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email),
 ):
+    _ensure_users_name_column(db)
+
     user = db.query(User).filter(User.email == current_user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -174,6 +247,8 @@ def get_my_profile(
         "user_id": user.id,
         "email": user.email,
         "role": user.role,
+        "name": _get_user_name(db, user.id),
+        "profile_data": _serialize_profile_data(db, user),
     }
 
 
@@ -183,17 +258,14 @@ def update_my_profile(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email),
 ):
+    _ensure_users_name_column(db)
+
     user = db.query(User).filter(User.email == current_user_email).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    if payload.email is not None:
-        new_email = payload.email.strip().lower()
-        if new_email != user.email.lower():
-            existing = db.query(User).filter(User.email == new_email).first()
-            if existing:
-                raise HTTPException(status_code=400, detail="Email already registered")
-            user.email = new_email
+    if payload.name is not None:
+        _set_user_name(db, user.id, payload.name.strip())
 
     if payload.new_password is not None:
         new_password = payload.new_password.strip()
@@ -204,6 +276,21 @@ def update_my_profile(
             )
         user.password = pwd_context.hash(new_password)
 
+    role_key = (user.role or "").lower()
+    profile_model = ROLE_MODEL_MAP.get(role_key)
+    profile_fields = ROLE_FIELDS_MAP.get(role_key, [])
+
+    if profile_model:
+        profile = db.query(profile_model).filter(profile_model.user_id == user.id).first()
+        if not profile:
+            profile = profile_model(user_id=user.id)
+            db.add(profile)
+
+        payload_dict = payload.model_dump(exclude_unset=True)
+        for field in profile_fields:
+            if field in payload_dict:
+                setattr(profile, field, payload_dict[field])
+
     db.commit()
     db.refresh(user)
 
@@ -211,4 +298,6 @@ def update_my_profile(
         "user_id": user.id,
         "email": user.email,
         "role": user.role,
+        "name": _get_user_name(db, user.id),
+        "profile_data": _serialize_profile_data(db, user),
     }
