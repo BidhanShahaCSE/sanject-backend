@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+from sqlalchemy import inspect, text
 from typing import List
 from datetime import datetime
 from pydantic import BaseModel, EmailStr
@@ -33,6 +34,14 @@ router = APIRouter(
 ALLOWED_TASK_TYPES = ["Assignment", "Lab Report", "Exam", "Home Work"]
 
 
+def _ensure_assignments_owner_email_column(db: Session) -> None:
+    inspector = inspect(db.bind)
+    assignment_columns = {column["name"] for column in inspector.get_columns("assignments")}
+    if "owner_email" not in assignment_columns:
+        db.execute(text("ALTER TABLE assignments ADD COLUMN owner_email VARCHAR"))
+        db.commit()
+
+
 class ShareProjectLinkRequest(BaseModel):
     drive_link: str
     recipient_email: EmailStr
@@ -53,6 +62,7 @@ def create_assignment(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
+    _ensure_assignments_owner_email_column(db)
     if data.task_type not in ALLOWED_TASK_TYPES:
         raise HTTPException(status_code=400, detail=f"Invalid task type. Allowed: {ALLOWED_TASK_TYPES}")
 
@@ -67,7 +77,8 @@ def create_assignment(
         start_date=data.start_date,
         deadline=data.deadline,
         org_id=data.org_id,
-        org_name=data.org_name
+        org_name=data.org_name,
+        owner_email=current_user_email,
     )
     
     try:
@@ -110,13 +121,28 @@ def create_assignment(
 
 # View a list of all assignments
 @router.get("/", response_model=List[AssignmentOut])
-def get_all_assignments(db: Session = Depends(get_db)):
-    return db.query(Assignment).all()
+def get_all_assignments(
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    _ensure_assignments_owner_email_column(db)
+    return (
+        db.query(Assignment)
+        .filter(func.lower(Assignment.owner_email) == current_user_email.lower())
+        .all()
+    )
 
 # View assignments with specific IDs
 @router.get("/{assignment_id}", response_model=AssignmentOut)
-def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
-    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+def get_assignment_by_id(
+    assignment_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    assignment = db.query(Assignment).filter(
+        Assignment.id == assignment_id,
+        func.lower(Assignment.owner_email) == current_user_email.lower(),
+    ).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
     return assignment
@@ -126,8 +152,12 @@ def get_assignment_by_id(assignment_id: int, db: Session = Depends(get_db)):
 def get_subtasks_by_assignment(
     assignment_id: int,
     db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
 ):
-    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    assignment = db.query(Assignment).filter(
+        Assignment.id == assignment_id,
+        func.lower(Assignment.owner_email) == current_user_email.lower(),
+    ).first()
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
@@ -228,7 +258,10 @@ def delete_assignment(
     db: Session = Depends(get_db),
     current_user_email: str = Depends(get_current_user_email)
 ):
-    db_assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    db_assignment = db.query(Assignment).filter(
+        Assignment.id == assignment_id,
+        func.lower(Assignment.owner_email) == current_user_email.lower(),
+    ).first()
     if not db_assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 

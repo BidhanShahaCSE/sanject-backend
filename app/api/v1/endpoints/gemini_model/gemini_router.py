@@ -6,6 +6,8 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from app.db.database import get_db
 from app.model.gemini_model import GeminiChat
+from app.model.user_model import User
+from app.api.v1.endpoints.auth.auth_utils import get_current_user_email
 
 # .env ফাইল থেকে API Key লোড করার জন্য
 load_dotenv()
@@ -132,13 +134,22 @@ class EditRequest(BaseModel):
 
 # ক. নতুন চ্যাট তৈরি করা (Create)
 @router.post("/chat")
-def create_chat(request: ChatRequest, db: Session = Depends(get_db)):
+def create_chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
     try:
+        user = db.query(User).filter(User.email == current_user_email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
         # AI থেকে রেসপন্স জেনারেট করা
         ai_response = _generate_ai_response(request.prompt)
         
         # ডাটাবেসে সেভ করা
         new_chat = GeminiChat(
+            user_id=user.id,
             prompt=request.prompt,
             ai_response=ai_response
         )
@@ -154,9 +165,16 @@ def create_chat(request: ChatRequest, db: Session = Depends(get_db)):
 
 # ক-২. খালি চ্যাট রুম তৈরি (AI call ছাড়া)
 @router.post("/chat-room")
-def create_empty_chat_room(db: Session = Depends(get_db)):
+def create_empty_chat_room(
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
     try:
-        new_chat = GeminiChat(prompt="", ai_response="")
+        user = db.query(User).filter(User.email == current_user_email).first()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        new_chat = GeminiChat(user_id=user.id, prompt="", ai_response="")
         db.add(new_chat)
         db.commit()
         db.refresh(new_chat)
@@ -166,21 +184,48 @@ def create_empty_chat_room(db: Session = Depends(get_db)):
 
 # খ. সব চ্যাট লিস্ট দেখা (Read All)
 @router.get("/chats")
-def get_all_chats(db: Session = Depends(get_db)):
-    return db.query(GeminiChat).all()
+def get_all_chats(
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return db.query(GeminiChat).filter(GeminiChat.user_id == user.id).all()
 
 # গ. নির্দিষ্ট একটি চ্যাট দেখা (Read Specific)
 @router.get("/chat/{chat_id}")
-def get_chat(chat_id: int, db: Session = Depends(get_db)):
-    chat = db.query(GeminiChat).filter(GeminiChat.id == chat_id).first()
+def get_chat(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    chat = db.query(GeminiChat).filter(
+        GeminiChat.id == chat_id,
+        GeminiChat.user_id == user.id,
+    ).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat session not found")
     return chat
 
 # ঘ. পুরনো চ্যাট এডিট করা (Update)
 @router.put("/chat/{chat_id}")
-def edit_chat(chat_id: int, request: EditRequest, db: Session = Depends(get_db)):
-    chat = db.query(GeminiChat).filter(GeminiChat.id == chat_id).first()
+def edit_chat(
+    chat_id: int,
+    request: EditRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    chat = db.query(GeminiChat).filter(
+        GeminiChat.id == chat_id,
+        GeminiChat.user_id == user.id,
+    ).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found to edit")
     
@@ -202,8 +247,18 @@ def edit_chat(chat_id: int, request: EditRequest, db: Session = Depends(get_db))
 
 # ঙ. চ্যাট ডিলিট করা (Delete)
 @router.delete("/chat/{chat_id}")
-def delete_chat(chat_id: int, db: Session = Depends(get_db)):
-    chat = db.query(GeminiChat).filter(GeminiChat.id == chat_id).first()
+def delete_chat(
+    chat_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    chat = db.query(GeminiChat).filter(
+        GeminiChat.id == chat_id,
+        GeminiChat.user_id == user.id,
+    ).first()
     if not chat:
         raise HTTPException(status_code=404, detail="Chat not found to delete")
     

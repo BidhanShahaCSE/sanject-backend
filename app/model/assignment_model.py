@@ -19,6 +19,7 @@ class Assignment(Base):
 
     org_id = Column(String)
     org_name = Column(String)
+    owner_email = Column(String, nullable=True, index=True)
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)    
