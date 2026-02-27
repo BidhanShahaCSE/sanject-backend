@@ -88,6 +88,36 @@ def get_all_reminders(
     _cleanup_expired_reminders(db, current_email)
     return db.query(Reminder).filter(Reminder.owner_email == current_email).all()
 
+
+@router.patch("/{reminder_id}", response_model=ReminderResponse)
+def update_reminder(
+    reminder_id: int,
+    reminder_data: ReminderUpdate,
+    db: Session = Depends(get_db),
+    current_email: str = Depends(get_current_user_email),
+):
+    _cleanup_expired_reminders(db, current_email)
+
+    reminder = db.query(Reminder).filter(
+        Reminder.id == reminder_id,
+        Reminder.owner_email == current_email,
+    ).first()
+
+    if not reminder:
+        raise HTTPException(status_code=404, detail="Reminder not found or unauthorized")
+
+    update_data = reminder_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(reminder, field, value)
+
+    try:
+        db.commit()
+        db.refresh(reminder)
+        return reminder
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 3. Deleting Reminders (Verifying Ownership with Access Token)
 @router.delete("/{reminder_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_reminder(
@@ -95,6 +125,8 @@ def delete_reminder(
     db: Session = Depends(get_db),
     current_email: str = Depends(get_current_user_email) # 🔒 Access Token check
 ):
+    _cleanup_expired_reminders(db, current_email)
+
     reminder = db.query(Reminder).filter(
         Reminder.id == reminder_id, 
         Reminder.owner_email == current_email
