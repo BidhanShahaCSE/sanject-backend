@@ -58,6 +58,7 @@ def save_device_token(
 @router.get("/", response_model=List[NotificationOut])
 def get_my_notifications(
     db: Session = Depends(get_db),
+    include_read: bool = False,
     current_user_email: str = Depends(get_current_user_email) # 🔒 Token check
 ):
     # Finding user id with token email
@@ -65,8 +66,11 @@ def get_my_notifications(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # Returning all user notification list as per design
-    return db.query(Notification).filter(Notification.user_id == user.id).order_by(Notification.created_at.desc()).all()
+    query = db.query(Notification).filter(Notification.user_id == user.id)
+    if not include_read:
+        query = query.filter(Notification.is_read == False)
+
+    return query.order_by(Notification.created_at.desc()).all()
 
 
 # 🚀 2. Marking the notification as "Read" (when the user clicks on 'view details')
@@ -77,6 +81,8 @@ def mark_as_read(
     current_user_email: str = Depends(get_current_user_email)
 ):
     user = db.query(User).filter(User.email == current_user_email).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
     
     notification = db.query(Notification).filter(
         Notification.id == notification_id, 
