@@ -27,33 +27,98 @@ def _extract_model_name(model_obj) -> str:
     return name.replace("models/", "")
 
 
-def _resolve_initial_model_name() -> str:
+def _preferred_model_name() -> str:
     preferred = (os.getenv("GEMINI_MODEL") or "").strip()
-    return preferred or "gemini-1.5-flash"
+    return preferred or "gemini-2.5-flash"
 
 
-_model_name = _resolve_initial_model_name()
+def _available_generate_models() -> list[str]:
+    models: list[str] = []
+    try:
+        for listed_model in genai.list_models():
+            methods = getattr(listed_model, "supported_generation_methods", []) or []
+            if "generateContent" not in methods:
+                continue
+            name = _extract_model_name(listed_model)
+            if name:
+                models.append(name)
+    except Exception:
+        return []
+
+    seen = set()
+    unique_models: list[str] = []
+    for name in models:
+        if name in seen:
+            continue
+        seen.add(name)
+        unique_models.append(name)
+    return unique_models
+
+
+def _resolve_candidates() -> list[str]:
+    preferred = _preferred_model_name()
+    available = _available_generate_models()
+    if not available:
+        return [preferred]
+
+    ordered: list[str] = []
+    if preferred in available:
+        ordered.append(preferred)
+
+    for name in [
+        "gemini-2.5-flash",
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-flash",
+    ]:
+        if name in available and name not in ordered:
+            ordered.append(name)
+
+    for name in available:
+        if name.startswith("gemini") and "flash" in name and name not in ordered:
+            ordered.append(name)
+
+    return ordered if ordered else [preferred]
+
+
+_model_name = _preferred_model_name()
 model = genai.GenerativeModel(_model_name)
 
 
 def _generate_ai_response(prompt: str) -> str:
     global model, _model_name
-    target_model = _resolve_initial_model_name()
-    try:
-        if _model_name != target_model:
-            model = genai.GenerativeModel(target_model)
-            _model_name = target_model
+    candidates = _resolve_candidates()
+    last_error = None
 
-        response = model.generate_content(prompt)
-        return getattr(response, "text", "") or ""
-    except Exception as error:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                f"AI model unavailable for '{target_model}'. "
-                f"Set GEMINI_MODEL in environment if needed. Error: {error}"
-            ),
-        )
+    for candidate in candidates:
+        try:
+            if _model_name != candidate:
+                model = genai.GenerativeModel(candidate)
+                _model_name = candidate
+
+            response = model.generate_content(prompt)
+            return getattr(response, "text", "") or ""
+        except Exception as error:
+            last_error = error
+
+    raise HTTPException(
+        status_code=502,
+        detail=(
+            f"AI model unavailable. Tried: {', '.join(candidates)}. "
+            f"Set GEMINI_MODEL in environment if needed. Error: {last_error}"
+        ),
+    )
+
+
+@router.get("/models")
+def get_available_models():
+    available = _available_generate_models()
+    return {
+        "preferred": _preferred_model_name(),
+        "candidates": _resolve_candidates(),
+        "available_count": len(available),
+    }
 
 # --- ১. Schemas (ডেটা আদান-প্রদানের ফরম্যাট) ---
 
