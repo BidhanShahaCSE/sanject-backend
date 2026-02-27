@@ -22,6 +22,7 @@ class SmsMessageOut(BaseModel):
     sender_email: str
     recipient_email: Optional[str] = None
     team_id: Optional[int] = None
+    project_id: Optional[int] = None
     message: str
     created_at: datetime
 

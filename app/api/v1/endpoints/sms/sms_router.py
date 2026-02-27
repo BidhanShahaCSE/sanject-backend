@@ -10,6 +10,9 @@ from app.model.direct_chat_room_model import DirectChatRoom
 from app.model.sms_message_model import SmsMessage
 from app.model.team_member_model import TeamMember
 from app.model.team_model import Team
+from app.model.project_model import Project
+from app.model.project_member_model import ProjectMember
+from app.model.project_chat_message_model import ProjectChatMessage
 from app.model.user_model import User
 from app.model.notification_model import Notification
 from app.schemas.sms_schemas import (
@@ -62,6 +65,26 @@ def _assert_team_member(db: Session, team_id: int, user_email: str) -> Team:
         raise HTTPException(status_code=403, detail="You are not a member of this team")
 
     return team
+
+
+def _assert_project_member(db: Session, project_id: int, user_email: str) -> Project:
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    normalized_email = (user_email or "").strip().lower()
+    owner_email = (project.owner_email or "").strip().lower()
+    if owner_email == normalized_email:
+        return project
+
+    is_member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == project_id,
+        func.lower(ProjectMember.email) == normalized_email,
+    ).first()
+    if not is_member:
+        raise HTTPException(status_code=403, detail="You are not a member of this project")
+
+    return project
 
 
 @router.post("/direct", response_model=SmsMessageOut, status_code=status.HTTP_201_CREATED)
@@ -351,3 +374,64 @@ def get_team_sms(
         .all()
     )
     return messages
+
+
+@router.post("/project/{project_id}", response_model=SmsMessageOut, status_code=status.HTTP_201_CREATED)
+def send_project_sms(
+    project_id: int,
+    payload: TeamSmsCreate,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    _assert_project_member(db, project_id, current_user_email)
+    message = payload.message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message is required")
+
+    project_sms = ProjectChatMessage(
+        project_id=project_id,
+        sender_email=current_user_email,
+        message=message,
+    )
+    db.add(project_sms)
+    db.commit()
+    db.refresh(project_sms)
+
+    return {
+        "id": project_sms.id,
+        "sender_email": project_sms.sender_email,
+        "recipient_email": None,
+        "team_id": None,
+        "project_id": project_sms.project_id,
+        "message": project_sms.message,
+        "created_at": project_sms.created_at,
+    }
+
+
+@router.get("/project/{project_id}", response_model=List[SmsMessageOut])
+def get_project_sms(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    _assert_project_member(db, project_id, current_user_email)
+
+    messages = (
+        db.query(ProjectChatMessage)
+        .filter(ProjectChatMessage.project_id == project_id)
+        .order_by(ProjectChatMessage.created_at.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": item.id,
+            "sender_email": item.sender_email,
+            "recipient_email": None,
+            "team_id": None,
+            "project_id": item.project_id,
+            "message": item.message,
+            "created_at": item.created_at,
+        }
+        for item in messages
+    ]
