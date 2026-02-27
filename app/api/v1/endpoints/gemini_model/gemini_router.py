@@ -20,7 +20,7 @@ class EditRequest(BaseModel):
 # --- ২. Gemini কনফিগারেশন ---
 
 # আপনার স্ক্রিনশট থেকে পাওয়া API Key এখানে দিন
-genai.configure(api_key="AIzaSyCKyr5FN81JvoNhIuRK7wErgpAWVYr-pDI") 
+genai.configure(api_key="uRK7wErgpAWVYr-pDI") 
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 # --- ৩. API Endpoints (CRUD) ---
