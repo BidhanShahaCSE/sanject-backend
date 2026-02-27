@@ -29,7 +29,7 @@ def _extract_model_name(model_obj) -> str:
 
 def _resolve_initial_model_name() -> str:
     preferred = (os.getenv("GEMINI_MODEL") or "").strip()
-    return preferred or "gemini-2.5-flash"
+    return preferred or "gemini-1.5-flash"
 
 
 _model_name = _resolve_initial_model_name()
