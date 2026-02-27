@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from app.db.database import get_db
 from app.model.gemini_model import GeminiChat
-import google.generativeai as genai
+
 # .env ফাইল থেকে API Key লোড করার জন্য
 load_dotenv()
 
@@ -20,7 +20,80 @@ if not GEMINI_KEY:
 
 # Gemini কনফিগারেশন
 genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+
+
+def _extract_model_name(model_obj) -> str:
+    name = getattr(model_obj, "name", "") or ""
+    return name.replace("models/", "")
+
+
+def _resolve_initial_model_name() -> str:
+    preferred = (os.getenv("GEMINI_MODEL") or "").strip()
+    candidates = [
+        preferred,
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro-latest",
+        "gemini-pro",
+    ]
+
+    available = set()
+    try:
+        for listed_model in genai.list_models():
+            methods = getattr(listed_model, "supported_generation_methods", []) or []
+            if "generateContent" in methods:
+                available.add(_extract_model_name(listed_model))
+    except Exception:
+        # list_models() fail করলে নিচের fallback list দিয়ে try করা হবে
+        pass
+
+    for name in candidates:
+        if not name:
+            continue
+        if not available or name in available:
+            return name
+
+    return "gemini-pro"
+
+
+_model_name = _resolve_initial_model_name()
+model = genai.GenerativeModel(_model_name)
+
+
+def _generate_ai_response(prompt: str) -> str:
+    global model, _model_name
+
+    retry_candidates = [
+        _model_name,
+        "gemini-2.0-flash",
+        "gemini-2.0-flash-lite",
+        "gemini-1.5-flash-latest",
+        "gemini-1.5-pro-latest",
+        "gemini-pro",
+    ]
+
+    tried = set()
+    last_error = None
+
+    for candidate in retry_candidates:
+        if not candidate or candidate in tried:
+            continue
+        tried.add(candidate)
+
+        try:
+            active_model = genai.GenerativeModel(candidate)
+            response = active_model.generate_content(prompt)
+            model = active_model
+            _model_name = candidate
+            return getattr(response, "text", "") or ""
+        except Exception as error:
+            last_error = error
+
+    raise HTTPException(
+        status_code=502,
+        detail=f"AI model unavailable. Tried: {', '.join(tried)}. Last error: {last_error}",
+    )
 
 # --- ১. Schemas (ডেটা আদান-প্রদানের ফরম্যাট) ---
 
@@ -37,12 +110,12 @@ class EditRequest(BaseModel):
 def create_chat(request: ChatRequest, db: Session = Depends(get_db)):
     try:
         # AI থেকে রেসপন্স জেনারেট করা
-        response = model.generate_content(request.prompt)
+        ai_response = _generate_ai_response(request.prompt)
         
         # ডাটাবেসে সেভ করা
         new_chat = GeminiChat(
             prompt=request.prompt,
-            ai_response=response.text
+            ai_response=ai_response
         )
         db.add(new_chat)
         db.commit()
@@ -73,9 +146,9 @@ def edit_chat(chat_id: int, request: EditRequest, db: Session = Depends(get_db))
     
     try:
         # নতুন প্রম্পট অনুযায়ী AI রেসপন্স আপডেট করা
-        response = model.generate_content(request.new_prompt)
+        ai_response = _generate_ai_response(request.new_prompt)
         chat.prompt = request.new_prompt
-        chat.ai_response = response.text
+        chat.ai_response = ai_response
         
         db.commit()
         db.refresh(chat)
