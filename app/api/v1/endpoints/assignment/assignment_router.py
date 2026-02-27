@@ -36,6 +36,11 @@ class ShareProjectLinkRequest(BaseModel):
     drive_link: str
     recipient_email: EmailStr
 
+
+class ReportProblemRequest(BaseModel):
+    recipient_email: EmailStr
+    problem_text: str
+
 # ----------------------------------------------------------------
 # 🚀 1. Main Assignment Section
 # ----------------------------------------------------------------
@@ -132,6 +137,88 @@ def get_subtasks_by_assignment(
         .all()
     )
     return subtasks
+
+
+@router.post("/{assignment_id}/share-project")
+def share_assignment_project_link(
+    assignment_id: int,
+    data: ShareProjectLinkRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    link = data.drive_link.strip()
+    if not link:
+        raise HTTPException(status_code=400, detail="Drive link is required")
+
+    sender = db.query(User).filter(User.email == current_user_email).first()
+    if not sender:
+        raise HTTPException(status_code=404, detail="Sender not found")
+
+    receiver = db.query(User).filter(User.email == data.recipient_email).first()
+    if not receiver:
+        raise HTTPException(status_code=404, detail="Recipient email is not registered")
+
+    try:
+        db.add(
+            Notification(
+                user_id=receiver.id,
+                title=f"Assignment link from {sender.email}",
+                message=f"{sender.email} shared an assignment drive link: {link}",
+                type="assignment_share",
+                reference_id=assignment.id,
+                is_read=False,
+            )
+        )
+        db.commit()
+        return {"message": "Project link sent successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to send link: {str(e)}")
+
+
+@router.post("/{assignment_id}/report-problem")
+def report_assignment_problem(
+    assignment_id: int,
+    data: ReportProblemRequest,
+    db: Session = Depends(get_db),
+    current_user_email: str = Depends(get_current_user_email),
+):
+    assignment = db.query(Assignment).filter(Assignment.id == assignment_id).first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    problem_text = data.problem_text.strip()
+    if not problem_text:
+        raise HTTPException(status_code=400, detail="Problem text is required")
+
+    sender = db.query(User).filter(User.email == current_user_email).first()
+    if not sender:
+        raise HTTPException(status_code=404, detail="Sender not found")
+
+    receiver = db.query(User).filter(User.email == data.recipient_email).first()
+    if not receiver:
+        raise HTTPException(status_code=404, detail="Recipient email is not registered")
+
+    try:
+        db.add(
+            Notification(
+                user_id=receiver.id,
+                title=f"Problem report from {sender.email}",
+                message=f"{sender.email} reported: {problem_text}",
+                type="assignment_problem",
+                reference_id=assignment.id,
+                is_read=False,
+            )
+        )
+        db.commit()
+        return {"message": "Problem report sent successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to send problem report: {str(e)}")
 
 # Deleting assignments
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
