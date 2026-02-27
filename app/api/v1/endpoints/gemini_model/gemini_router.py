@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from dotenv import load_dotenv
 from app.db.database import get_db
 from app.model.gemini_model import GeminiChat
-
+import google.generativeai as genai
 # .env ফাইল থেকে API Key লোড করার জন্য
 load_dotenv()
 
