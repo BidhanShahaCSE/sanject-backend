@@ -1,38 +1,45 @@
+import os
 import google.generativeai as genai
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel # Schemas তৈরির জন্য
+from pydantic import BaseModel
+from dotenv import load_dotenv
 from app.db.database import get_db
 from app.model.gemini_model import GeminiChat
 
+# .env ফাইল থেকে API Key লোড করার জন্য
+load_dotenv()
+
 router = APIRouter(prefix="/ai", tags=["Gemini AI Chat"])
 
-# --- ১. পূর্ণাঙ্গ Schemas (Pydantic Models) ---
+# এনভায়রনমেন্ট থেকে সিক্রেট কি রিড করা
+GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+
+if not GEMINI_KEY:
+    raise ValueError("GEMINI_API_KEY missing in .env file! Please add it.")
+
+# Gemini কনফিগারেশন
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
+# --- ১. Schemas (ডেটা আদান-প্রদানের ফরম্যাট) ---
 
 class ChatRequest(BaseModel):
-    """ইউজার যখন নতুন প্রশ্ন পাঠাবে"""
     prompt: str
 
 class EditRequest(BaseModel):
-    """ইউজার যখন পুরনো চ্যাট এডিট করবে"""
     new_prompt: str
 
-# --- ২. Gemini কনফিগারেশন ---
+# --- ২. API Endpoints (CRUD) ---
 
-# আপনার স্ক্রিনশট থেকে পাওয়া API Key এখানে দিন
-genai.configure(api_key="uRK7wErgpAWVYr-pDI") 
-model = genai.GenerativeModel('gemini-1.5-flash')
-
-# --- ৩. API Endpoints (CRUD) ---
-
-# ক. নতুন চ্যাট করা এবং ডাটাবেসে সেভ করা
+# ক. নতুন চ্যাট তৈরি করা (Create)
 @router.post("/chat")
 def create_chat(request: ChatRequest, db: Session = Depends(get_db)):
     try:
-        # Gemini থেকে উত্তর আনা
+        # AI থেকে রেসপন্স জেনারেট করা
         response = model.generate_content(request.prompt)
         
-        # ডাটাবেস মডেলে ডেটা রাখা
+        # ডাটাবেসে সেভ করা
         new_chat = GeminiChat(
             prompt=request.prompt,
             ai_response=response.text
@@ -44,41 +51,45 @@ def create_chat(request: ChatRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
-# খ. সব চ্যাট হিস্ট্রি দেখা
+# খ. সব চ্যাট লিস্ট দেখা (Read All)
 @router.get("/chats")
 def get_all_chats(db: Session = Depends(get_db)):
     return db.query(GeminiChat).all()
 
-# গ. আইডি দিয়ে নির্দিষ্ট চ্যাট দেখা
+# গ. নির্দিষ্ট একটি চ্যাট দেখা (Read Specific)
 @router.get("/chat/{chat_id}")
 def get_chat(chat_id: int, db: Session = Depends(get_db)):
     chat = db.query(GeminiChat).filter(GeminiChat.id == chat_id).first()
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="Chat session not found")
     return chat
 
-# ঘ. চ্যাট এডিট করা (আবার নতুন রেসপন্স তৈরি হবে)
+# ঘ. পুরনো চ্যাট এডিট করা (Update)
 @router.put("/chat/{chat_id}")
 def edit_chat(chat_id: int, request: EditRequest, db: Session = Depends(get_db)):
     chat = db.query(GeminiChat).filter(GeminiChat.id == chat_id).first()
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="Chat not found to edit")
     
-    # নতুন এডিট করা প্রশ্নের ভিত্তিতে AI রেসপন্স
-    response = model.generate_content(request.new_prompt)
-    chat.prompt = request.new_prompt
-    chat.ai_response = response.text
-    
-    db.commit()
-    return chat
+    try:
+        # নতুন প্রম্পট অনুযায়ী AI রেসপন্স আপডেট করা
+        response = model.generate_content(request.new_prompt)
+        chat.prompt = request.new_prompt
+        chat.ai_response = response.text
+        
+        db.commit()
+        db.refresh(chat)
+        return chat
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI Update Error: {str(e)}")
 
-# ঙ. চ্যাট ডিলিট করা
+# ঙ. চ্যাট ডিলিট করা (Delete)
 @router.delete("/chat/{chat_id}")
 def delete_chat(chat_id: int, db: Session = Depends(get_db)):
     chat = db.query(GeminiChat).filter(GeminiChat.id == chat_id).first()
     if not chat:
-        raise HTTPException(status_code=404, detail="Chat not found")
+        raise HTTPException(status_code=404, detail="Chat not found to delete")
     
     db.delete(chat)
     db.commit()
-    return {"message": "Chat deleted successfully from database"}
+    return {"message": "Chat history deleted successfully", "id": chat_id}
