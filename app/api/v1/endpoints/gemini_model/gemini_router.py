@@ -151,6 +151,19 @@ def create_chat(request: ChatRequest, db: Session = Depends(get_db)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI Error: {str(e)}")
 
+
+# ক-২. খালি চ্যাট রুম তৈরি (AI call ছাড়া)
+@router.post("/chat-room")
+def create_empty_chat_room(db: Session = Depends(get_db)):
+    try:
+        new_chat = GeminiChat(prompt="", ai_response="")
+        db.add(new_chat)
+        db.commit()
+        db.refresh(new_chat)
+        return new_chat
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Room create error: {str(e)}")
+
 # খ. সব চ্যাট লিস্ট দেখা (Read All)
 @router.get("/chats")
 def get_all_chats(db: Session = Depends(get_db)):
@@ -174,7 +187,9 @@ def edit_chat(chat_id: int, request: EditRequest, db: Session = Depends(get_db))
     try:
         # নতুন প্রম্পট অনুযায়ী AI রেসপন্স আপডেট করা
         ai_response = _generate_ai_response(request.new_prompt)
-        chat.prompt = request.new_prompt
+        # প্রথম user prompt-টাই title হিসেবে রেখে দেওয়া হবে
+        if not (chat.prompt or "").strip():
+            chat.prompt = request.new_prompt
         chat.ai_response = ai_response
         
         db.commit()
